@@ -6,7 +6,7 @@
 - [x] GitHub repository connected to Vercel
 - [x] Environment variables configured in Vercel
 - [x] WhatsApp number updated: https://wa.me/15058006451
-- [x] Bitcoin address updated: bc1qjs86eudh7t00de2f9e94zy6p8pcznjhyqqh3w8
+- [x] Bitcoin address updated: bc1qgt2sl66ykgs272p03rk5e4c92vcwr80y8k6s4t
 - [x] Code pushed to GitHub (main branch)
 - [x] Prisma schema configured
 - [x] Seed data prepared
@@ -150,7 +150,7 @@ Visit `/admin` and use the campaign form:
 ## 📞 Support
 
 - WhatsApp: https://wa.me/15058006451
-- Bitcoin: bc1qjs86eudh7t00de2f9e94zy6p8pcznjhyqqh3w8
+- Bitcoin: bc1qgt2sl66ykgs272p03rk5e4c92vcwr80y8k6s4t
 
 ## 📚 Documentation
 

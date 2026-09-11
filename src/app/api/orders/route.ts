@@ -72,6 +72,11 @@ function serializeOrder(order: {
     status: order.status,
     paymentMethod: order.paymentMethod,
     notes: order.notes,
+    paymentImage: (order as { paymentImage?: string | null }).paymentImage ?? null,
+    paymentNote: (order as { paymentNote?: string | null }).paymentNote ?? null,
+    customerPaidAt: (order as { customerPaidAt?: Date | null }).customerPaidAt
+      ? (order as { customerPaidAt?: Date | null }).customerPaidAt!.toISOString()
+      : null,
     createdAt: order.createdAt.toISOString(),
     items: order.items.map((it) => ({
       id: it.id,
@@ -111,9 +116,25 @@ export async function PATCH(request: Request) {
   try {
     const body = await request.json();
     const id = typeof body.id === "string" ? body.id : "";
+    if (!id) {
+      return NextResponse.json({ error: "Order id is required" }, { status: 400 });
+    }
+
+    if (body.paymentImage !== undefined || body.paymentNote !== undefined) {
+      const updatedDetails = await prisma.order.update({
+        where: { id },
+        data: {
+          ...(body.paymentImage !== undefined ? { paymentImage: body.paymentImage || null } : {}),
+          ...(body.paymentNote !== undefined ? { paymentNote: body.paymentNote || null } : {}),
+        },
+        include: { items: true },
+      });
+      return NextResponse.json({ order: serializeOrder(updatedDetails) });
+    }
+
     const status = body.status as OrderStatus;
-    if (!id || !ORDER_STATUSES.includes(status)) {
-      return NextResponse.json({ error: "Valid order id and status are required" }, { status: 400 });
+    if (!ORDER_STATUSES.includes(status)) {
+      return NextResponse.json({ error: "Valid order status is required" }, { status: 400 });
     }
 
     const existing = await prisma.order.findUnique({
@@ -177,7 +198,7 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     }
-    const methods = ["BITCOIN", "ZELLE", "CHIME"];
+    const methods = ["BITCOIN", "ZELLE", "CHIME", "CASHAPP", "APPLE_PAY"];
     if (!methods.includes(paymentMethod)) {
       return NextResponse.json(
         { error: "Invalid payment method" },

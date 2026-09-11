@@ -104,7 +104,7 @@ Visit `/admin` on your deployed site and manually add products and campaigns.
 ## 📱 Contact Information
 
 - **WhatsApp:** https://wa.me/15058006451
-- **Bitcoin Address:** `bc1qjs86eudh7t00de2f9e94zy6p8pcznjhyqqh3w8`
+- **Bitcoin Address:** `bc1qgt2sl66ykgs272p03rk5e4c92vcwr80y8k6s4t`
 
 ## 📁 Project Structure
 

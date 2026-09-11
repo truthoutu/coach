@@ -72,6 +72,8 @@ enum PaymentMethod {
   BITCOIN
   ZELLE
   CHIME
+  CASHAPP
+  APPLE_PAY
 }
 
 model Order {
@@ -92,6 +94,9 @@ model Order {
   status        OrderStatus   @default(PENDING_PAYMENT)
   paymentMethod PaymentMethod
   notes         String?
+  paymentImage  String?
+  paymentNote   String?
+  customerPaidAt DateTime?
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 

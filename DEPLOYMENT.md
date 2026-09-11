@@ -9,7 +9,7 @@ Your Vercel deployment is live but the database is **empty**. You need to seed i
 - ✅ GitHub repository connected to Vercel
 - ✅ Environment variables set in Vercel
 - ✅ WhatsApp number configured: https://wa.me/15058006451
-- ✅ Bitcoin address configured: bc1qjs86eudh7t00de2f9e94zy6p8pcznjhyqqh3w8
+- ✅ Bitcoin address configured: bc1qgt2sl66ykgs272p03rk5e4c92vcwr80y8k6s4t
 - ✅ Database schema deployed
 - ⚠️ **Database is EMPTY** - needs seeding
 
@@ -101,7 +101,7 @@ After seeding, verify everything is working:
    - Add items to cart
    - Go to checkout
    - Select Bitcoin payment
-   - Should see address: `bc1qjs86eudh7t00de2f9e94zy6p8pcznjhyqqh3w8`
+   - Should see address: `bc1qgt2sl66ykgs272p03rk5e4c92vcwr80y8k6s4t`
 
 ## 🐛 Troubleshooting
 
@@ -134,7 +134,7 @@ npx prisma db push
 
 ### Contact Information (Already Configured)
 - ✅ WhatsApp: https://wa.me/15058006451
-- ✅ Bitcoin: bc1qjs86eudh7t00de2f9e94zy6p8pcznjhyqqh3w8
+- ✅ Bitcoin: bc1qgt2sl66ykgs272p03rk5e4c92vcwr80y8k6s4t
 
 ## 🎯 Next Steps
 

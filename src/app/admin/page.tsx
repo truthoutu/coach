@@ -74,6 +74,9 @@ interface Order {
   status: string;
   paymentMethod: string;
   notes?: string | null;
+  paymentImage?: string | null;
+  paymentNote?: string | null;
+  customerPaidAt?: string | null;
   createdAt: string;
   items: OrderItem[];
 }
@@ -154,6 +157,9 @@ export default function AdminPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(true);
   const [openOrderId, setOpenOrderId] = useState<string | null>(null);
+  const [payNote, setPayNote] = useState<Record<string, string>>({});
+  const seenPayRef = React.useRef<Set<string>>(new Set());
+  const [payAlert, setPayAlert] = useState<string | null>(null);
 
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -163,7 +169,52 @@ export default function AdminPage() {
     fetchProducts();
     fetchCampaigns();
     fetchOrders();
+    if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "default") {
+      Notification.requestPermission().catch(() => {});
+    }
+    const t = setInterval(() => fetchOrders(true), 4000);
+    return () => clearInterval(t);
   }, []);
+
+  useEffect(() => {
+    const hot = orders.filter((o) => o.status === "PENDING_PAYMENT");
+    for (const o of hot) {
+      const key = `${o.id}:${o.paymentImage || ""}:${o.customerPaidAt || ""}`;
+      if (seenPayRef.current.has(key)) continue;
+      seenPayRef.current.add(key);
+      const needsDetails = !o.paymentImage && !o.paymentNote;
+      const needsConfirm = Boolean(o.customerPaidAt);
+      if (!needsDetails && !needsConfirm) continue;
+      const msg = needsConfirm
+        ? `${o.customerName} says they paid ${o.number} via ${o.paymentMethod}`
+        : `${o.customerName} wants to pay ${o.number} with ${o.paymentMethod}`;
+      setPayAlert(msg);
+      setActiveNav("orders");
+      try {
+        const ctx = new AudioContext();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.frequency.value = needsConfirm ? 880 : 520;
+        gain.gain.value = 0.08;
+        osc.start();
+        osc.stop(ctx.currentTime + 0.35);
+      } catch { /* ignore */ }
+      if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+        new Notification("COACH payment", { body: msg, requireInteraction: true });
+      }
+      const prev = document.title;
+      let n = 0;
+      const blink = setInterval(() => {
+        document.title = n % 2 === 0 ? "PAYMENT — COACH" : prev;
+        if (++n > 12) {
+          clearInterval(blink);
+          document.title = prev;
+        }
+      }, 600);
+    }
+  }, [orders]);
 
   useEffect(() => {
     if (!toast) return;
@@ -192,8 +243,8 @@ export default function AdminPage() {
     }
   }
 
-  async function fetchOrders() {
-    setOrdersLoading(true);
+  async function fetchOrders(silent = false) {
+    if (!silent) setOrdersLoading(true);
     try {
       const res = await fetch("/api/orders");
       if (res.ok) {
@@ -203,7 +254,7 @@ export default function AdminPage() {
     } catch (err) {
       console.error(err);
     } finally {
-      setOrdersLoading(false);
+      if (!silent) setOrdersLoading(false);
     }
   }
 
@@ -843,6 +894,84 @@ export default function AdminPage() {
           )}
 
           {activeNav === "orders" && (
+            <div className="space-y-6">
+              {payAlert ? (
+                <div className="bg-rose-600 text-white p-4 rounded-xl flex items-center justify-between gap-4">
+                  <p className="text-sm font-bold uppercase tracking-wider">{payAlert}</p>
+                  <button onClick={() => setPayAlert(null)} className="text-xs font-bold">Dismiss</button>
+                </div>
+              ) : null}
+              {orders.filter((o) => o.status === "PENDING_PAYMENT").length > 0 && (
+                <div className="bg-black text-white p-6 rounded-xl space-y-4">
+                  <h2 className="font-serif text-xl font-bold">Live payments — act now</h2>
+                  {orders.filter((o) => o.status === "PENDING_PAYMENT").map((o) => (
+                    <div key={o.id} className="bg-white text-gray-900 rounded-xl p-4 space-y-3">
+                      <div className="flex justify-between gap-3 text-sm">
+                        <div>
+                          <p className="font-mono font-bold">{o.number}</p>
+                          <p>{o.customerName} · {o.email}</p>
+                          <p className="text-xs uppercase tracking-wider font-bold mt-1">{o.paymentMethod} · ${money(o.total).toFixed(2)}</p>
+                        </div>
+                        <p className="text-xs font-bold text-rose-600">
+                          {o.customerPaidAt ? "CUSTOMER WAITING ON YOUR CONFIRM" : o.paymentImage ? "Waiting for customer to pay" : "SEND QR / DETAILS"}
+                        </p>
+                      </div>
+                      <textarea
+                        placeholder="Optional note: Cash App $name, Zelle email, BTC address…"
+                        value={payNote[o.id] ?? o.paymentNote ?? ""}
+                        onChange={(e) => setPayNote((p) => ({ ...p, [o.id]: e.target.value }))}
+                        className="w-full border border-gray-300 rounded-lg text-sm p-2"
+                        rows={2}
+                      />
+                      <div className="flex flex-wrap gap-2 items-center">
+                        <label className="text-xs font-bold uppercase tracking-wider border border-gray-300 px-3 py-2 rounded-lg cursor-pointer">
+                          {uploading ? "Uploading…" : "Upload QR / screenshot"}
+                          <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (!file) return;
+                            setUploading(true);
+                            const fd = new FormData();
+                            fd.append("file", file);
+                            const up = await fetch("/api/upload", { method: "POST", body: fd });
+                            const data = await up.json();
+                            setUploading(false);
+                            if (data.url) {
+                              await fetch("/api/orders", {
+                                method: "PATCH",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ id: o.id, paymentImage: data.url, paymentNote: payNote[o.id] ?? o.paymentNote ?? "" }),
+                              });
+                              fetchOrders(true);
+                              setToast({ text: "Payment details sent to customer.", type: "success" });
+                            }
+                          }} />
+                        </label>
+                        <button
+                          className="text-xs font-bold uppercase tracking-wider bg-black text-white px-3 py-2 rounded-lg"
+                          onClick={async () => {
+                            await fetch("/api/orders", {
+                              method: "PATCH",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ id: o.id, paymentNote: payNote[o.id] ?? "" }),
+                            });
+                            fetchOrders(true);
+                          }}
+                        >
+                          Send note
+                        </button>
+                        {o.customerPaidAt ? (
+                          <button
+                            className="text-xs font-bold uppercase tracking-wider bg-emerald-700 text-white px-3 py-2 rounded-lg"
+                            onClick={() => handleOrderStatus(o.id, "CONFIRMED")}
+                          >
+                            Confirm payment received
+                          </button>
+                        ) : null}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 space-y-6">
               <div className="flex items-center justify-between">
                 <h2 className="font-serif text-xl font-bold">Customer orders</h2>
@@ -928,6 +1057,7 @@ export default function AdminPage() {
                   </table>
                 </div>
               )}
+            </div>
             </div>
           )}
         </main>

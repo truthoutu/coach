@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCart } from "@/context/CartContext";
@@ -17,18 +17,28 @@ import {
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 const WHATSAPP_LINK = "https://wa.me/15058006451";
-const BITCOIN_ADDRESS = "bc1qjs86eudh7t00de2f9e94zy6p8pcznjhyqqh3w8";
+const BITCOIN_ADDRESS = "bc1qgt2sl66ykgs272p03rk5e4c92vcwr80y8k6s4t";
 
 // ─── Payment methods that are genuinely operational ─────────────────────────
 // Payment is coordinated through WhatsApp with our team; card and gift-card
 // processing are not available yet and are intentionally NOT offered.
-type PaymentMethod = "bitcoin" | "zelle" | "chime";
+type PaymentMethod = "bitcoin" | "zelle" | "chime" | "cashapp" | "apple_pay";
 
 const PAYMENT_METHODS: { id: PaymentMethod; label: string }[] = [
- { id: "bitcoin", label: "Bitcoin" },
+ { id: "apple_pay", label: "Apple Pay" },
+ { id: "cashapp", label: "Cash App" },
  { id: "zelle", label: "Zelle" },
  { id: "chime", label: "Chime" },
+ { id: "bitcoin", label: "Bitcoin" },
 ];
+
+function methodLabel(m: string) {
+  if (m === "apple_pay" || m === "APPLE_PAY") return "Apple Pay";
+  if (m === "cashapp" || m === "CASHAPP") return "Cash App";
+  if (m === "zelle" || m === "ZELLE") return "Zelle";
+  if (m === "chime" || m === "CHIME") return "Chime";
+  return "Bitcoin";
+}
 
 // ─── Countries ────────────────────────────────────────────────────────────────
 const COUNTRIES = [
@@ -100,8 +110,13 @@ export default function CheckoutPage() {
  const [error, setError] = useState("");
 
  // Bitcoin UI state
- const [btcCopied, setBtcCopied] = useState(false);
- const [btcPaidStep, setBtcPaidStep] = useState(false);
+ const [payLive, setPayLive] = useState<{
+   detailsReady: boolean;
+   paymentImage: string | null;
+   paymentNote: string | null;
+   customerPaidAt: string | null;
+   confirmed: boolean;
+ } | null>(null);
 
  // WhatsApp popup support (avoid popup blockers after async work)
  const openWhatsAppAfter = (url: string) => {
@@ -158,12 +173,39 @@ export default function CheckoutPage() {
  setOrderNumber(data.order.number);
  setOrderTotal(data.order.total);
  setPhase("payment");
+ setPayLive({
+ detailsReady: false,
+ paymentImage: null,
+ paymentNote: null,
+ customerPaidAt: null,
+ confirmed: false,
+ });
  } catch (err) {
  console.error(err);
  setError("Could not place your order. Please try again.");
  setIsCreatingOrder(false);
  }
  };
+
+ useEffect(() => {
+   if (phase !== "payment" || !orderNumber) return;
+   let stop = false;
+   const tick = async () => {
+     try {
+       const res = await fetch(`/api/orders/pay?number=${encodeURIComponent(orderNumber)}`);
+       const data = await res.json();
+       if (!stop && data.order) setPayLive(data.order);
+     } catch {
+       /* retry */
+     }
+   };
+   tick();
+   const t = setInterval(tick, 3000);
+   return () => {
+     stop = true;
+     clearInterval(t);
+   };
+ }, [phase, orderNumber]);
 
  // ── Build order message for a given payment method ────────────────────────
  const buildOrderMessage = (method: PaymentMethod) => {
@@ -192,185 +234,76 @@ export default function CheckoutPage() {
  };
 
  // ────────────────────────────────────────────────────────────────────────────
- const handleCopyBtc = () => {
- const copyText = (text: string) => {
- const el = document.createElement("textarea");
- el.value = text;
- el.style.position = "fixed";
- el.style.opacity = "0";
- document.body.appendChild(el);
- el.focus();
- el.select();
- try {
- document.execCommand("copy");
- } catch {
- /* silent */
- }
- document.body.removeChild(el);
- };
-
- if (navigator.clipboard && window.isSecureContext) {
- navigator.clipboard.writeText(BITCOIN_ADDRESS).catch(() => copyText(BITCOIN_ADDRESS));
- } else {
- copyText(BITCOIN_ADDRESS);
- }
- setBtcCopied(true);
- setTimeout(() => setBtcCopied(false), 2500);
- };
-
- // ── Success / processing screen after an order is placed ──────────────────
  if (phase === "payment") {
  const handleDone = () => {
  clearCart();
  setPhase("form");
- setBtcPaidStep(false);
+ setPayLive(null);
  setOrderNumber("");
  router.push("/");
  };
 
- const zelle = paymentMethod === "zelle";
- const chime = paymentMethod === "chime";
+ const waitingDetails = !payLive?.detailsReady && !payLive?.confirmed;
+ const waitingAdmin = Boolean(payLive?.customerPaidAt) && !payLive?.confirmed;
+ const canConfirm = Boolean(payLive?.detailsReady) && !payLive?.customerPaidAt && !payLive?.confirmed;
+
+ const markPaid = async () => {
+ const res = await fetch("/api/orders/pay", {
+ method: "POST",
+ headers: { "Content-Type": "application/json" },
+ body: JSON.stringify({ number: orderNumber }),
+ });
+ const data = await res.json();
+ if (data.order) setPayLive(data.order);
+ };
 
  return (
  <div className="min-h-screen bg-paper flex items-center justify-center p-6 text-ink">
  <div className="bg-white p-8 md:p-12 border border-hairline max-w-xl w-full space-y-6">
  <div className="text-center space-y-3">
  <div className="w-14 h-14 bg-canvas text-ink border border-hairline flex items-center justify-center mx-auto">
- <Clock size={28} />
+ {waitingAdmin || payLive?.confirmed ? <Loader2 size={28} className={payLive?.confirmed ? "" : "animate-spin"} /> : <Clock size={28} />}
  </div>
- <div>
- <h1 className="headline-serif text-3xl md:text-4xl mb-2">Order Received</h1>
- <p className="text-sm text-muted">
- Order: <span className="font-bold text-black">{orderNumber}</span>
- </p>
- </div>
+ <h1 className="headline-serif text-3xl">{payLive?.confirmed ? "Payment confirmed" : "Complete payment"}</h1>
+ <p className="text-sm text-muted">Order <span className="font-bold text-black">{orderNumber}</span> · {methodLabel(paymentMethod)} · ${orderTotal.toFixed(2)}</p>
  </div>
 
- {/* Honest status flow */}
- <div className="bg-canvas border border-hairline p-5 space-y-2.5">
- <p className="text-label text-ink">
- Payment Pending
- </p>
- <p className="text-[13px] text-ink-soft leading-relaxed">
- Your order is booked but <strong>not yet paid</strong>. It will only begin
- processing once payment is confirmed by our team ({paymentMethod === "bitcoin" ? "Bitcoin" : paymentMethod === "zelle" ? "Zelle" : "Chime"}).
- We&apos;ll confirm within minutes on WhatsApp.
- </p>
- <div className="space-y-1.5 pt-2">
- {[
- { label: "Order created", done: true },
- { label: "Payment pending", active: true },
- { label: "Payment confirmed", done: false },
- { label: "Processing & shipping", done: false },
- ].map((step, i) => (
- <div key={i} className="flex items-center gap-2.5">
- <span
- className={`w-4 h-4 flex items-center justify-center text-[9px] font-bold ${
- step.done
- ? "bg-black text-white"
- : step.active
- ? "border border-ink text-ink"
- : "border border-hairline text-muted"
- }`}
- >
- {step.done ? "✓" : ""}
- </span>
- <span className={`text-xs ${step.active ? "font-medium text-ink" : step.done ? "text-ink-soft" : "text-muted"}`}>
- {step.label}
- </span>
+ {waitingDetails && (
+ <div className="bg-canvas border border-hairline p-5 text-center space-y-3">
+ <Loader2 className="animate-spin mx-auto" size={28} />
+ <p className="text-sm font-medium">Waiting for payment details</p>
+ <p className="text-[13px] text-muted">Our team was just notified. Stay on this page — the {methodLabel(paymentMethod)} QR or extra note will appear here when sent.</p>
+ {paymentMethod === "bitcoin" ? (
+ <p className="text-[13px] break-all font-mono pt-2">{BITCOIN_ADDRESS}</p>
+ ) : null}
  </div>
- ))}
- </div>
- </div>
+ )}
 
- {/* Payment action per method */}
- {paymentMethod === "bitcoin" && (
+ {payLive?.detailsReady && !payLive?.confirmed && (
  <div className="space-y-4">
- <div className="bg-canvas border border-hairline p-5 space-y-4">
- <p className="text-sm font-bold">₿ Pay with Bitcoin</p>
- <div className="bg-canvas border border-hairline p-4 text-center">
- <p className="text-label text-ink-soft mb-1">Send exactly</p>
- <p className="text-2xl font-medium text-ink">${orderTotal.toFixed(2)}</p>
- <p className="text-[13px] text-muted mt-1">worth of Bitcoin (BTC)</p>
+ {payLive.paymentImage ? (
+ <div className="border border-hairline p-3 bg-canvas">
+ <img src={payLive.paymentImage} alt="Payment details" className="w-full max-h-80 object-contain mx-auto" />
  </div>
- <div>
- <p className="text-xs uppercase tracking-wider font-bold text-ink-soft mb-2">To this Bitcoin address:</p>
- <div className="flex items-center gap-2 border border-hairline p-3 bg-canvas">
- <p className="flex-1 text-[13px] tracking-wide text-ink break-all leading-relaxed">{BITCOIN_ADDRESS}</p>
- <button
- type="button"
- onClick={handleCopyBtc}
- className={`flex-shrink-0 p-2 transition-colors ${
- btcCopied ? "bg-ink text-white" : "bg-canvas hover:bg-hairline text-ink-soft"
- }`}
- >
- {btcCopied ? <Check size={14} /> : <Copy size={14} />}
- </button>
- </div>
- </div>
- {!btcPaidStep ? (
- <button
- type="button"
- onClick={() => setBtcPaidStep(true)}
- className="btn-primary w-full"
- >
- ✅ I&apos;ve Paid
- </button>
+ ) : null}
+ {payLive.paymentNote ? <p className="text-sm whitespace-pre-wrap border border-hairline p-4">{payLive.paymentNote}</p> : null}
+ {!waitingAdmin ? (
+ <button type="button" onClick={markPaid} className="btn-primary w-full">Confirm payment</button>
  ) : (
- <div className="space-y-3">
- <p className="text-xs text-muted">
- Send us your transaction ID or a screenshot so we can verify and begin processing.
- </p>
- <button
- type="button"
- onClick={() => openWhatsAppAfter(buildWhatsAppUrl(buildOrderMessage("bitcoin")))}
- className="flex items-center justify-center gap-2 w-full bg-[#25D366] hover:bg-[#20bb5a] text-white py-3.5 text-sm font-bold uppercase tracking-wider transition-colors"
- >
- <MessageCircle size={16} /> Send Receipt on WhatsApp
- </button>
+ <div className="text-center space-y-3 py-4">
+ <Loader2 className="animate-spin mx-auto" size={36} />
+ <p className="text-sm font-medium">Verifying your payment</p>
+ <p className="text-[13px] text-muted">Keep this page open. This spinner stops when our team confirms the transfer.</p>
  </div>
  )}
- </div>
- <button
- type="button"
- onClick={handleDone}
- className="btn-outline w-full"
- >
- Return to Home
- </button>
  </div>
  )}
 
- {(zelle || chime) && (
- <div className="space-y-4">
- <div className={` border overflow-hidden ${zelle ? "border-hairline" : "border-hairline"}`}>
- <div className={`px-5 py-4 ${zelle ? "bg-ink" : "bg-ink"} text-white`}>
- <p className="font-bold text-sm">{zelle ? "💜 Pay via Zelle" : "🟢 Pay via Chime"}</p>
- <p className="text-xs mt-0.5 opacity-90">Complete payment with our team on WhatsApp</p>
- </div>
- <div className="px-5 py-5 space-y-4">
- <p className="text-xs text-muted leading-relaxed">
- Our team will send you the {zelle ? "Zelle" : "Chime"} payment details and confirm your order. No card
- or gift-card details are collected on this site.
- </p>
- <button
- type="button"
- onClick={() => openWhatsAppAfter(buildWhatsAppUrl(buildOrderMessage(paymentMethod)))}
- className="flex items-center justify-center gap-2 w-full bg-[#25D366] hover:bg-[#20bb5a] text-white py-3.5 text-sm font-bold uppercase tracking-wider transition-colors"
- >
- <MessageCircle size={16} /> Get {zelle ? "Zelle" : "Chime"} Details on WhatsApp
- </button>
- </div>
- </div>
- <button
- type="button"
- onClick={handleDone}
- className="btn-outline w-full"
- >
- I&apos;ll finish this in WhatsApp — Return to Home
- </button>
- </div>
+ {payLive?.confirmed && (
+ <p className="text-sm text-center">Thank you. Your order is now being prepared.</p>
  )}
+
+ <button type="button" onClick={handleDone} className="btn-outline w-full">Return to store</button>
  </div>
  </div>
  );
@@ -494,7 +427,6 @@ export default function CheckoutPage() {
  type="button"
  onClick={() => {
  setPaymentMethod(method.id);
- setBtcPaidStep(false);
  }}
  className={`py-3 px-2 text-[11px] sm:text-xs font-medium tracking-wide border transition-colors flex flex-col items-center justify-center gap-1.5 min-h-[64px] ${
  paymentMethod === method.id

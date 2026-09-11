@@ -112,7 +112,7 @@ async function verify() {
       }
       
       // Verify Bitcoin address
-      if (html.includes('bc1qjs86eudh7t00de2f9e94zy6p8pcznjhyqqh3w8')) {
+      if (html.includes('bc1qgt2sl66ykgs272p03rk5e4c92vcwr80y8k6s4t')) {
         checks.passed.push('✅ Bitcoin Address: Correctly configured');
       } else {
         checks.failed.push('❌ Bitcoin Address: Not found or incorrect');
