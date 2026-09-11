@@ -105,7 +105,7 @@ async function verify() {
       const html = await res.text();
       
       // Verify WhatsApp number
-      if (html.includes('wa.me/15058006451')) {
+      if (html.includes('wa.me/15058006924')) {
         checks.passed.push('✅ WhatsApp Integration: Correctly configured');
       } else {
         checks.failed.push('❌ WhatsApp Integration: Number not found or incorrect');

@@ -8,7 +8,7 @@ Your Vercel deployment is live but the database is **empty**. You need to seed i
 
 - ✅ GitHub repository connected to Vercel
 - ✅ Environment variables set in Vercel
-- ✅ WhatsApp number configured: https://wa.me/15058006451
+- ✅ WhatsApp number configured: https://wa.me/15058006924
 - ✅ Bitcoin address configured: bc1qgt2sl66ykgs272p03rk5e4c92vcwr80y8k6s4t
 - ✅ Database schema deployed
 - ⚠️ **Database is EMPTY** - needs seeding
@@ -95,7 +95,7 @@ After seeding, verify everything is working:
 4. **Test Live Chat (Tawk.to)**
    - Global Tawk widget should load in the bottom corner (position/style controlled in the Tawk dashboard)
    - Official owner credentials are baked in (property `6aa17322094d073447a182b4`, widget `1k23ajhur`); no env setup required
-   - Footer WhatsApp support link still opens wa.me/15058006451
+   - Footer WhatsApp support link still opens wa.me/15058006924
 
 5. **Test Checkout**
    - Add items to cart
@@ -133,7 +133,7 @@ npx prisma db push
 - ✅ `NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET` = (configured)
 
 ### Contact Information (Already Configured)
-- ✅ WhatsApp: https://wa.me/15058006451
+- ✅ WhatsApp: https://wa.me/15058006924
 - ✅ Bitcoin: bc1qgt2sl66ykgs272p03rk5e4c92vcwr80y8k6s4t
 
 ## 🎯 Next Steps
@@ -149,4 +149,4 @@ If you encounter any issues:
 1. Check Vercel deployment logs
 2. Check Neon database logs
 3. Verify all environment variables are set correctly in Vercel
-4. Contact support via WhatsApp: https://wa.me/15058006451
+4. Contact support via WhatsApp: https://wa.me/15058006924

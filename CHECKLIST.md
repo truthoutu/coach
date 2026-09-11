@@ -5,7 +5,7 @@
 ### ✅ Completed
 - [x] GitHub repository connected to Vercel
 - [x] Environment variables configured in Vercel
-- [x] WhatsApp number updated: https://wa.me/15058006451
+- [x] WhatsApp number updated: https://wa.me/15058006924
 - [x] Bitcoin address updated: bc1qgt2sl66ykgs272p03rk5e4c92vcwr80y8k6s4t
 - [x] Code pushed to GitHub (main branch)
 - [x] Prisma schema configured
@@ -79,7 +79,7 @@ Or manually check:
 - [ ] Cart works: /cart
 - [ ] Checkout works: /checkout
 - [ ] Tawk.to live chat loads (global widget, controlled from Tawk dashboard)
-- [ ] Footer WhatsApp support link still works (wa.me/15058006451)
+- [ ] Footer WhatsApp support link still works (wa.me/15058006924)
 - [ ] Bitcoin address shows in checkout
 
 ### Step 3: Test Core Functionality
@@ -149,7 +149,7 @@ Visit `/admin` and use the campaign form:
 
 ## 📞 Support
 
-- WhatsApp: https://wa.me/15058006451
+- WhatsApp: https://wa.me/15058006924
 - Bitcoin: bc1qgt2sl66ykgs272p03rk5e4c92vcwr80y8k6s4t
 
 ## 📚 Documentation

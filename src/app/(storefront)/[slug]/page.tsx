@@ -271,7 +271,7 @@ export default async function InfoPage({ params }: InfoPageProps) {
               <Phone className="w-5 h-5 text-ink" strokeWidth={1.25} aria-hidden="true" />
               <h3 className="text-label">WhatsApp Support</h3>
               <a
-                href="https://wa.me/15058006451"
+                href="https://wa.me/15058006924"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-[13px] text-muted underline underline-offset-4 hover:text-ink transition-colors"

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma, hasDatabase } from "@/lib/prisma";
 import { toNumber } from "@/lib/money";
+import { ensureOrderSchema } from "@/lib/ensure-order-schema";
 
 export const dynamic = "force-dynamic";
 
@@ -34,6 +35,7 @@ export async function GET(request: Request) {
   if (!hasDatabase()) {
     return NextResponse.json({ error: "Unavailable" }, { status: 503 });
   }
+  await ensureOrderSchema();
   const number = new URL(request.url).searchParams.get("number") || "";
   if (!number) return NextResponse.json({ error: "Missing order" }, { status: 400 });
   const order = await prisma.order.findUnique({ where: { number } });
@@ -45,6 +47,7 @@ export async function POST(request: Request) {
   if (!hasDatabase()) {
     return NextResponse.json({ error: "Unavailable" }, { status: 503 });
   }
+  await ensureOrderSchema();
   const body = await request.json();
   const number = typeof body.number === "string" ? body.number : "";
   if (!number) return NextResponse.json({ error: "Missing order" }, { status: 400 });

@@ -103,7 +103,7 @@ Visit `/admin` on your deployed site and manually add products and campaigns.
 
 ## 📱 Contact Information
 
-- **WhatsApp:** https://wa.me/15058006451
+- **WhatsApp:** https://wa.me/15058006924
 - **Bitcoin Address:** `bc1qgt2sl66ykgs272p03rk5e4c92vcwr80y8k6s4t`
 
 ## 📁 Project Structure
@@ -221,4 +221,4 @@ Private - All rights reserved
 ## 🤝 Support
 
 - **Live chat:** Tawk.to widget (configured via `NEXT_PUBLIC_TAWK_PROPERTY_ID` / `NEXT_PUBLIC_TAWK_WIDGET_ID`)
-- **WhatsApp (checkout support):** https://wa.me/15058006451
+- **WhatsApp (checkout support):** https://wa.me/15058006924

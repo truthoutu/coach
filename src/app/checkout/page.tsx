@@ -4,6 +4,7 @@ import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCart } from "@/context/CartContext";
+import { BITCOIN_ADDRESS, SITE_EMAIL, WHATSAPP_DISPLAY, WHATSAPP_LINK } from "@/lib/site";
 import {
  Lock,
  ArrowLeft,
@@ -14,10 +15,6 @@ import {
  Clock,
  Loader2,
 } from "lucide-react";
-
-// ─── Constants ───────────────────────────────────────────────────────────────
-const WHATSAPP_LINK = "https://wa.me/15058006451";
-const BITCOIN_ADDRESS = "bc1qgt2sl66ykgs272p03rk5e4c92vcwr80y8k6s4t";
 
 // ─── Payment methods that are genuinely operational ─────────────────────────
 // Payment is coordinated through WhatsApp with our team; card and gift-card
@@ -513,23 +510,14 @@ export default function CheckoutPage() {
  </div>
  </div>
 
- <div className="bg-canvas p-4 border border-hairline space-y-2 text-[11px] text-muted">
- <div className="flex items-center gap-2 text-black font-semibold">
- <CheckCircle2 size={16} /> How payment works
- </div>
- <p>
- 1. Your order is saved with a reference number.
- <br />
- 2. We&apos;ll arrange payment with you on WhatsApp.
- <br />
- 3. Your order begins processing once payment is confirmed.
- </p>
- </div>
-
  <a href={WHATSAPP_LINK} target="_blank" rel="noopener noreferrer"
  className="flex items-center justify-center gap-2 w-full py-3 border border-hairline text-ink hover:bg-canvas text-label transition-colors">
  <MessageCircle size={14} />
- Questions? Chat with us on WhatsApp
+ WhatsApp {WHATSAPP_DISPLAY}
+ </a>
+ <a href={`mailto:${SITE_EMAIL}`}
+ className="flex items-center justify-center w-full py-3 border border-hairline text-ink hover:bg-canvas text-label transition-colors">
+ {SITE_EMAIL}
  </a>
  </div>
  </div>

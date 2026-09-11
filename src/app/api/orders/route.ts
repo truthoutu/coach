@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma, hasDatabase } from "@/lib/prisma";
 import { isAdminRequest } from "@/lib/admin-auth";
 import { toNumber } from "@/lib/money";
+import { ensureOrderSchema } from "@/lib/ensure-order-schema";
 import type { OrderStatus } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
@@ -97,6 +98,7 @@ export async function GET(request: Request) {
   if (!hasDatabase()) {
     return NextResponse.json({ orders: [] }, { status: 200 });
   }
+  await ensureOrderSchema();
   try {
     const orders = await prisma.order.findMany({
       orderBy: { createdAt: "desc" },
@@ -177,6 +179,7 @@ export async function PATCH(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    await ensureOrderSchema();
     const body = await request.json();
     const {
       email,
@@ -232,7 +235,7 @@ export async function POST(request: Request) {
             { status: 400 },
           );
         }
-        const price = product.price.toNumber();
+        const price = toNumber(product.price);
         itemsTotal += price * quantity;
         validated.push({
           productId: product.id,

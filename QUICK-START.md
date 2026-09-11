@@ -5,7 +5,7 @@
 - ✅ Code pushed to GitHub
 - ✅ Vercel deployment connected
 - ✅ Environment variables set in Vercel
-- ✅ WhatsApp: https://wa.me/15058006451 ✓
+- ✅ WhatsApp: https://wa.me/15058006924 ✓
 - ✅ Bitcoin: bc1qgt2sl66ykgs272p03rk5e4c92vcwr80y8k6s4t ✓
 
 ## 🔴 ONE CRITICAL STEP REMAINING
@@ -64,7 +64,7 @@ See `DEPLOYMENT.md` for SQL queries to run in Neon dashboard
 
 - Full instructions: See `DEPLOYMENT.md`
 - Troubleshooting: See `CHECKLIST.md`
-- WhatsApp Support: https://wa.me/15058006451
+- WhatsApp Support: https://wa.me/15058006924
 
 ---
 
