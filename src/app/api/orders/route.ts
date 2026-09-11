@@ -235,7 +235,7 @@ export async function POST(request: Request) {
             { status: 400 },
           );
         }
-        const price = toNumber(product.price);
+        const price = Math.max(toNumber(product.price), toNumber(item.price));
         itemsTotal += price * quantity;
         validated.push({
           productId: product.id,

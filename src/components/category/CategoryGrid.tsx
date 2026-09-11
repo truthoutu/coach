@@ -217,6 +217,23 @@ export default function CategoryGrid({
 
   const visible = sorted.slice(0, visibleCount);
   const remaining = sorted.length - visible.length;
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (remaining <= 0) return;
+    const el = sentinelRef.current;
+    if (!el) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          setVisibleCount((count) => Math.min(count + PAGE_STEP, sorted.length));
+        }
+      },
+      { rootMargin: "600px 0px" },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [remaining, sorted.length]);
 
   const changeSort = (value: SortKey) => {
     setSort(value);
@@ -477,14 +494,8 @@ export default function CategoryGrid({
         )}
 
         {remaining > 0 && (
-          <div className="mt-16 text-center">
-            <button
-              type="button"
-              onClick={() => setVisibleCount((count) => count + PAGE_STEP)}
-              className="btn-outline"
-            >
-              Load More ({remaining} remaining)
-            </button>
+          <div ref={sentinelRef} className="mt-16 h-10 flex items-center justify-center text-[11px] tracking-[0.14em] uppercase text-muted">
+            Loading more
           </div>
         )}
       </div>

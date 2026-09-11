@@ -172,7 +172,7 @@ export default function AdminPage() {
     if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "default") {
       Notification.requestPermission().catch(() => {});
     }
-    const t = setInterval(() => fetchOrders(true), 4000);
+    const t = setInterval(() => fetchOrders(true), 2000);
     return () => clearInterval(t);
   }, []);
 
@@ -905,7 +905,30 @@ export default function AdminPage() {
                 <div className="bg-black text-white p-6 rounded-xl space-y-4">
                   <h2 className="font-serif text-xl font-bold">Live payments — act now</h2>
                   {orders.filter((o) => o.status === "PENDING_PAYMENT").map((o) => (
-                    <div key={o.id} className="bg-white text-gray-900 rounded-xl p-4 space-y-3">
+                    <div
+                      key={o.id}
+                      className="bg-white text-gray-900 rounded-xl p-4 space-y-3"
+                      onPaste={async (e) => {
+                        const file = Array.from(e.clipboardData.files).find((f) => f.type.startsWith("image/"));
+                        if (!file) return;
+                        e.preventDefault();
+                        setUploading(true);
+                        const fd = new FormData();
+                        fd.append("file", file);
+                        const up = await fetch("/api/upload", { method: "POST", body: fd });
+                        const data = await up.json();
+                        setUploading(false);
+                        if (data.url) {
+                          await fetch("/api/orders", {
+                            method: "PATCH",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ id: o.id, paymentImage: data.url, paymentNote: payNote[o.id] ?? o.paymentNote ?? "" }),
+                          });
+                          fetchOrders(true);
+                          setToast({ text: "Payment details sent to customer.", type: "success" });
+                        }
+                      }}
+                    >
                       <div className="flex justify-between gap-3 text-sm">
                         <div>
                           <p className="font-mono font-bold">{o.number}</p>
@@ -925,7 +948,7 @@ export default function AdminPage() {
                       />
                       <div className="flex flex-wrap gap-2 items-center">
                         <label className="text-xs font-bold uppercase tracking-wider border border-gray-300 px-3 py-2 rounded-lg cursor-pointer">
-                          {uploading ? "Uploading…" : "Upload QR / screenshot"}
+                          {uploading ? "Uploading…" : "Upload or paste QR"}
                           <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
                             const file = e.target.files?.[0];
                             if (!file) return;

@@ -168,7 +168,7 @@ export default function CheckoutPage() {
  }
 
  setOrderNumber(data.order.number);
- setOrderTotal(data.order.total);
+ setOrderTotal(Number(data.order.total) > 0 ? Number(data.order.total) : subtotal);
  setPhase("payment");
  setPayLive({
  detailsReady: false,
@@ -197,7 +197,7 @@ export default function CheckoutPage() {
      }
    };
    tick();
-   const t = setInterval(tick, 3000);
+   const t = setInterval(tick, 1500);
    return () => {
      stop = true;
      clearInterval(t);
@@ -240,7 +240,8 @@ export default function CheckoutPage() {
  router.push("/");
  };
 
- const waitingDetails = !payLive?.detailsReady && !payLive?.confirmed;
+ const waitingDetails = !payLive?.detailsReady && !payLive?.confirmed && paymentMethod !== "bitcoin";
+ const bitcoinReady = paymentMethod === "bitcoin" && !payLive?.confirmed;
  const waitingAdmin = Boolean(payLive?.customerPaidAt) && !payLive?.confirmed;
  const canConfirm = Boolean(payLive?.detailsReady) && !payLive?.customerPaidAt && !payLive?.confirmed;
 
@@ -276,7 +277,7 @@ export default function CheckoutPage() {
  </div>
  )}
 
- {payLive?.detailsReady && !payLive?.confirmed && (
+ {(payLive?.detailsReady || bitcoinReady) && !payLive?.confirmed && (
  <div className="space-y-4">
  {payLive.paymentImage ? (
  <div className="border border-hairline p-3 bg-canvas">
