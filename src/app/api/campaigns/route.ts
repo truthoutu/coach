@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma, hasDatabase } from "@/lib/prisma";
+import { isAdminRequest } from "@/lib/admin-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +20,9 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  if (!(await isAdminRequest(request))) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   try {
     const body = await request.json();
     const { title, subtitle, image, link, isFeatured, displayOrder } = body;
@@ -26,7 +30,7 @@ export async function POST(request: Request) {
     if (!title || !image) {
       return NextResponse.json(
         { error: "Title and image URL are required" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -37,7 +41,7 @@ export async function POST(request: Request) {
         image,
         link: link || "#",
         isFeatured: Boolean(isFeatured),
-        displayOrder: displayOrder ? parseInt(displayOrder) : 0,
+        displayOrder: displayOrder ? parseInt(String(displayOrder), 10) || 0 : 0,
       },
     });
 
@@ -48,7 +52,42 @@ export async function POST(request: Request) {
   }
 }
 
+export async function PATCH(request: Request) {
+  if (!(await isAdminRequest(request))) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  try {
+    const body = await request.json();
+    const id = typeof body.id === "string" ? body.id : "";
+    if (!id) {
+      return NextResponse.json({ error: "Campaign ID is required" }, { status: 400 });
+    }
+
+    const data: Record<string, unknown> = {};
+    if (typeof body.title === "string") data.title = body.title;
+    if (body.subtitle !== undefined) data.subtitle = body.subtitle || "";
+    if (typeof body.image === "string" && body.image) data.image = body.image;
+    if (body.link !== undefined) data.link = body.link || "#";
+    if (body.isFeatured !== undefined) data.isFeatured = Boolean(body.isFeatured);
+    if (body.displayOrder !== undefined) {
+      data.displayOrder = parseInt(String(body.displayOrder), 10) || 0;
+    }
+
+    const campaign = await prisma.campaign.update({
+      where: { id },
+      data,
+    });
+    return NextResponse.json(campaign);
+  } catch (error) {
+    console.error("Error updating campaign:", error);
+    return NextResponse.json({ error: "Failed to update campaign" }, { status: 500 });
+  }
+}
+
 export async function DELETE(request: Request) {
+  if (!(await isAdminRequest(request))) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   try {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");
