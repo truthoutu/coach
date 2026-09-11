@@ -1,0 +1,114 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Product {
+  id            String    @id @default(cuid())
+  slug          String    @unique
+  name          String
+  description   String?
+  price         Decimal   @db.Decimal(10, 2)
+  compareAtPrice Decimal? @db.Decimal(10, 2)
+  currency      String    @default("USD")
+  category      String    @default("Bags")
+  subcategory   String?
+  gender        String    @default("Unisex")
+  collection    String?
+  images        String[]
+  sku           String?
+  inventory     Int       @default(0)
+  isNew         Boolean   @default(false)
+  isFeatured    Boolean   @default(false)
+  status        String    @default("ACTIVE")
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  orderItems OrderItem[]
+}
+
+model Campaign {
+  id           String   @id @default(cuid())
+  title        String
+  subtitle     String?
+  image        String
+  link         String   @default("#")
+  isFeatured   Boolean  @default(false)
+  displayOrder Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model NewsletterSubscription {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  consent   Boolean  @default(false)
+  source    String   @default("footer")
+  createdAt DateTime @default(now())
+}
+
+model Feedback {
+  id        String   @id @default(cuid())
+  name      String?
+  email     String?
+  message   String
+  createdAt DateTime @default(now())
+}
+
+enum OrderStatus {
+  PENDING_PAYMENT
+  CONFIRMED
+  PROCESSING
+  SHIPPED
+  DELIVERED
+  CANCELLED
+}
+
+enum PaymentMethod {
+  BITCOIN
+  ZELLE
+  CHIME
+}
+
+model Order {
+  id            String        @id @default(cuid())
+  number        String        @unique
+  customerName  String
+  email         String
+  phone         String?
+  address       String
+  city          String
+  postalCode    String
+  country       String
+  itemsTotal    Decimal       @db.Decimal(10, 2)
+  shippingCost  Decimal       @default(0) @db.Decimal(10, 2)
+  taxTotal      Decimal       @default(0) @db.Decimal(10, 2)
+  total         Decimal       @db.Decimal(10, 2)
+  currency      String        @default("USD")
+  status        OrderStatus   @default(PENDING_PAYMENT)
+  paymentMethod PaymentMethod
+  notes         String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  items OrderItem[]
+}
+
+model OrderItem {
+  id        String  @id @default(cuid())
+  orderId   String
+  productId String?
+  name      String
+  sku       String?
+  price     Decimal @db.Decimal(10, 2)
+  currency  String  @default("USD")
+  quantity  Int
+  image     String?
+
+  order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product? @relation(fields: [productId], references: [id])
+}

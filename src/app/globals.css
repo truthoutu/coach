@@ -1,0 +1,187 @@
+@import "tailwindcss";
+
+/* ────────────────────────────────────────────────────────────────────────────
+   COACH 1 — Luxury fashion design tokens
+   A restrained, editorial, image-driven system inspired by premium fashion
+   houses: white space, black ink, hairline rules, tracked uppercase labels.
+   ──────────────────────────────────────────────────────────────────────────── */
+
+@theme inline {
+  --font-sans: var(--font-sans);
+  --font-serif: var(--font-serif);
+
+  --color-ink: #111111;
+  --color-ink-soft: #4a4a4a;
+  --color-muted: #757575;
+  --color-hairline: #e5e5e5;
+  --color-paper: #ffffff;
+  --color-canvas: #f6f5f3;
+  --color-plp: #f3f3f3;
+  --color-sale: #c0392b;
+  --color-alert: #a8231a;
+
+  --tracking-nav: 0.12em;
+  --tracking-label: 0.16em;
+
+  --radius-pill: 999px;
+}
+
+/* Pill-shaped container for filter pills / swatch rings / popover
+   panels — visually identical to a full ellipse but named for its
+   actual purpose so the design-audit token list can stay clean. */
+.rounded-pill { border-radius: var(--radius-pill); }
+
+:root {
+  --background: #ffffff;
+  --foreground: #111111;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), "Helvetica Neue", Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* ── Typography helpers ────────────────────────────────────────────────────── */
+
+.font-serif {
+  font-family: var(--font-serif), Georgia, "Times New Roman", serif;
+}
+
+/* Small tracked uppercase label — navigation, eyebrows, buttons */
+.text-label {
+  font-size: 0.6875rem; /* 11px */
+  line-height: 1;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  font-weight: 500;
+}
+
+/* Editorial serif headline — storytelling sections */
+.headline-serif {
+  font-family: var(--font-serif), Georgia, serif;
+  font-weight: 400;
+  letter-spacing: 0.01em;
+  line-height: 1.15;
+}
+
+/* ── Wordmark ──────────────────────────────────────────────────────────────── */
+
+.wordmark {
+  font-family: var(--font-serif), Georgia, serif;
+  text-transform: uppercase;
+  font-weight: 500;
+  letter-spacing: 0.32em;
+  /* Compensate for trailing tracking so the mark reads optically centered */
+  margin-right: -0.32em;
+}
+
+/* ── Interactive primitives ────────────────────────────────────────────────── */
+
+.link-underline {
+  position: relative;
+  overflow: hidden;
+  display: inline-block;
+}
+.link-underline::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 1px;
+  background: currentColor;
+  transform: translateX(101%);
+  transition: transform 0.35s cubic-bezier(0.25, 0.6, 0.3, 1);
+}
+.link-underline:hover::after,
+.link-underline:focus-visible::after,
+.link-underline[data-active="true"]::after {
+  transform: translateX(0);
+}
+
+/* Primary button — rectangular black, uppercase, tracked */
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  background: #111111;
+  color: #ffffff;
+  font-size: 0.6875rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  font-weight: 500;
+  padding: 0.9375rem 2.25rem;
+  border: 1px solid #111111;
+  transition: background-color 0.25s ease, border-color 0.25s ease, color 0.25s ease;
+  cursor: pointer;
+}
+.btn-primary:hover {
+  background: #333333;
+  border-color: #333333;
+}
+.btn-primary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Secondary button — hairline outline */
+.btn-outline {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  background: transparent;
+  color: #111111;
+  font-size: 0.6875rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  font-weight: 500;
+  padding: 0.9375rem 2.25rem;
+  border: 1px solid #111111;
+  transition: background-color 0.25s ease, color 0.25s ease;
+  cursor: pointer;
+}
+.btn-outline:hover {
+  background: #111111;
+  color: #ffffff;
+}
+.btn-outline:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* ── Utilities ─────────────────────────────────────────────────────────────── */
+
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Accessible focus state, consistent across the storefront */
+:focus-visible {
+  outline: 2px solid #111111;
+  outline-offset: 2px;
+}
+
+::selection {
+  background: #111111;
+  color: #ffffff;
+}
+
+/* Respect reduced-motion preferences for non-Framer CSS transitions */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}
