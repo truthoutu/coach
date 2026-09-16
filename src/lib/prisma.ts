@@ -11,9 +11,11 @@ function createClient(): PrismaClient | null {
   const url = process.env.DATABASE_URL;
   if (!url || url.length === 0) return null;
   try {
+    // NOTE: Prisma v6 removed the `datasources` constructor override — the
+    // connection string comes from DATABASE_URL in the environment.
+    void url;
     return new PrismaClient({
       log: ["error"],
-      datasources: { db: { url } },
     });
   } catch {
     return null;
@@ -21,31 +23,23 @@ function createClient(): PrismaClient | null {
 }
 
 /**
- * Lazily-created Prisma client. `null` when no DATABASE_URL is configured
- * (e.g. static build / preview without backend). Check `hasDatabase()`
- * before touching the database so builds never need a live connection.
+ * Prisma client singleton, cached on `globalThis` so hot-reload in dev and
+ * warm serverless containers reuse one client (a fresh pool per request
+ * exhausts the Neon connection limit and 500s every route).
+ *
+ * Importing this module never throws, even without DATABASE_URL - route
+ * handlers check `hasDatabase()` first and return a friendly 503 instead.
  */
-export const prisma: PrismaClient = new Proxy({} as PrismaClient, {
-  get(_target, prop) {
-    const client = globalForPrisma.prisma ?? createClient();
-    if (!client) {
-      throw new Error(
-        "Database is not configured (DATABASE_URL is missing).",
-      );
-    }
-    const value = (client as unknown as Record<string | symbol, unknown>)[prop];
-    return typeof value === "function" ? value.bind(client) : value;
-  },
-});
+export const prisma: PrismaClient = ((): PrismaClient => {
+  const existing = globalForPrisma.prisma;
+  if (existing) return existing;
+  const client = createClient() ?? new PrismaClient({ log: ["error"] });
+  globalForPrisma.prisma = client;
+  return client;
+})();
 
 /** Returns true when a database connection string is configured. */
 export function hasDatabase(): boolean {
   const url = process.env.DATABASE_URL;
   return Boolean(url && url.length > 0);
 }
-
-if (process.env.NODE_ENV !== "production") {
-  const client = createClient();
-  if (client) globalForPrisma.prisma = client;
-}
-
