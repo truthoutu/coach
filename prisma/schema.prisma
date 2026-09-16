@@ -83,6 +83,7 @@ model Order {
   customerPaidAt     DateTime?
   giftCardSubmission GiftCardSubmission[]
   items              OrderItem[]
+  orderMessages     OrderMessage[]
 }
 
 model GiftCardSubmission {
