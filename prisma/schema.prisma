@@ -72,6 +72,34 @@ enum PaymentMethod {
   BITCOIN
   ZELLE
   CHIME
+  CASHAPP
+  GIFT_CARD
+}
+
+enum GiftCardStatus {
+  SUBMITTED
+  VERIFIED
+  REJECTED
+}
+
+enum SenderRole {
+  CUSTOMER
+  ADMIN
+}
+
+model OrderMessage {
+  id             String     @id @default(cuid())
+  orderId        String
+  senderRole     SenderRole
+  body           String
+  readByAdmin    Boolean    @default(false)
+  readByCustomer Boolean    @default(false)
+  createdAt      DateTime   @default(now())
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@index([createdAt])
 }
 
 model Order {
@@ -95,7 +123,27 @@ model Order {
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 
-  items OrderItem[]
+  items              OrderItem[]
+  giftCardSubmission GiftCardSubmission?
+  messages           OrderMessage[]
+}
+
+model GiftCardSubmission {
+  id            String          @id @default(cuid())
+  orderId       String          @unique
+  brand         String
+  codeEncrypted String
+  codeLast4     String
+  pinEncrypted  String?
+  claimedValue  Decimal?        @db.Decimal(10, 2)
+  status        GiftCardStatus  @default(SUBMITTED)
+  reviewNotes   String?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([status])
 }
 
 model OrderItem {

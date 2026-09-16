@@ -4,30 +4,32 @@ import React, { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCart } from "@/context/CartContext";
+import { GIFT_CARD_BRANDS } from "@/lib/gift-card-brands";
+import OrderTracker from "@/components/checkout/OrderTracker";
 import {
  Lock,
  ArrowLeft,
  MessageCircle,
- Copy,
- Check,
  CheckCircle2,
- Clock,
+ Gift,
  Loader2,
 } from "lucide-react";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 const WHATSAPP_LINK = "https://wa.me/15058006451";
-const BITCOIN_ADDRESS = "bc1qjs86eudh7t00de2f9e94zy6p8pcznjhyqqh3w8";
 
 // ─── Payment methods that are genuinely operational ─────────────────────────
-// Payment is coordinated through WhatsApp with our team; card and gift-card
-// processing are not available yet and are intentionally NOT offered.
-type PaymentMethod = "bitcoin" | "zelle" | "chime";
+// Payment is coordinated through WhatsApp with our team. Gift card payments
+// are accepted: the customer submits a card code and our team verifies it
+// manually before the order is processed.
+type PaymentMethod = "bitcoin" | "zelle" | "chime" | "cashapp" | "gift_card";
 
 const PAYMENT_METHODS: { id: PaymentMethod; label: string }[] = [
  { id: "bitcoin", label: "Bitcoin" },
  { id: "zelle", label: "Zelle" },
  { id: "chime", label: "Chime" },
+ { id: "cashapp", label: "Cash App" },
+ { id: "gift_card", label: "Gift Card" },
 ];
 
 // ─── Countries ────────────────────────────────────────────────────────────────
@@ -99,28 +101,30 @@ export default function CheckoutPage() {
  const [isCreatingOrder, setIsCreatingOrder] = useState(false);
  const [error, setError] = useState("");
 
- // Bitcoin UI state
- const [btcCopied, setBtcCopied] = useState(false);
- const [btcPaidStep, setBtcPaidStep] = useState(false);
+ // Gift card UI state
+ const [giftCardData, setGiftCardData] = useState({
+  brand: "AMAZON",
+  code: "",
+  pin: "",
+  claimedValue: "",
+ });
 
- // WhatsApp popup support (avoid popup blockers after async work)
- const openWhatsAppAfter = (url: string) => {
- const win = window.open("", "_blank");
- if (win) {
- win.opener = null;
- win.location.href = url;
- } else {
- window.location.href = url;
- }
- };
-
- const handlePlaceOrder = async (e: React.FormEvent) => {
+  const handlePlaceOrder = async (e: React.FormEvent) => {
  e.preventDefault();
  setError("");
 
  if (cart.length === 0) {
  setError("Your shopping bag is empty.");
  return;
+ }
+
+ // Gift card details are required up front so the team has everything
+ // needed to verify the card as soon as the order lands.
+ if (paymentMethod === "gift_card") {
+ if (!giftCardData.code.trim()) {
+ setError("Please enter your gift card code, or choose a different payment method.");
+ return;
+ }
  }
 
  setIsCreatingOrder(true);
@@ -138,6 +142,16 @@ export default function CheckoutPage() {
  postalCode: formData.postalCode,
  country: formData.country,
  paymentMethod: paymentMethod.toUpperCase(),
+ ...(paymentMethod === "gift_card"
+ ? {
+ giftCard: {
+ brand: giftCardData.brand,
+ code: giftCardData.code,
+ pin: giftCardData.pin,
+ claimedValue: giftCardData.claimedValue,
+ },
+ }
+ : {}),
  items: cart.map((i) => ({
  productId: i.id,
  name: i.name,
@@ -176,7 +190,11 @@ export default function CheckoutPage() {
  ? "I'd like to pay with Bitcoin."
  : method === "zelle"
  ? "💜 I'd like to pay with Zelle."
- : "🟢 I'd like to pay with Chime.";
+ : method === "chime"
+ ? "🟢 I'd like to pay with Chime."
+ : method === "cashapp"
+ ? "💚 I'd like to pay with Cash App."
+ : "🎁 I'd like to pay with a gift card.";
 
  return (
  `Hi COACH 1! 🛍️\n\n` +
@@ -184,6 +202,12 @@ export default function CheckoutPage() {
  `📦 *Order ${orderNumber}*\n` +
  `Items:\n${itemLines}\n\n` +
  `💰 *Total:* $${subtotal.toFixed(2)}\n\n` +
+ (method === "gift_card"
+ ? `🎁 *Gift card:* ${GIFT_CARD_BRANDS.find((b) => b.id === giftCardData.brand)?.label ?? giftCardData.brand}\n` +
+ `🔑 *Code:* ${giftCardData.code.trim()}\n` +
+ (giftCardData.pin.trim() ? `🔐 *PIN:* ${giftCardData.pin.trim()}\n` : "") +
+ (giftCardData.claimedValue.trim() ? `💵 *Claimed balance:* $${giftCardData.claimedValue.trim()}\n` : "") +
+ `\n` : "") +
  `📍 *Ship to:* ${addr}\n` +
  `📧 *Email:* ${formData.email}\n` +
  (formData.phone ? `📱 *Phone:* ${formData.phone}\n` : "") +
@@ -191,190 +215,31 @@ export default function CheckoutPage() {
  );
  };
 
- // ────────────────────────────────────────────────────────────────────────────
- const handleCopyBtc = () => {
- const copyText = (text: string) => {
- const el = document.createElement("textarea");
- el.value = text;
- el.style.position = "fixed";
- el.style.opacity = "0";
- document.body.appendChild(el);
- el.focus();
- el.select();
- try {
- document.execCommand("copy");
- } catch {
- /* silent */
- }
- document.body.removeChild(el);
- };
-
- if (navigator.clipboard && window.isSecureContext) {
- navigator.clipboard.writeText(BITCOIN_ADDRESS).catch(() => copyText(BITCOIN_ADDRESS));
- } else {
- copyText(BITCOIN_ADDRESS);
- }
- setBtcCopied(true);
- setTimeout(() => setBtcCopied(false), 2500);
- };
-
- // ── Success / processing screen after an order is placed ──────────────────
+ // ── Live payment tracker (order status, admin thread, I-have-paid) ────────
  if (phase === "payment") {
- const handleDone = () => {
- clearCart();
- setPhase("form");
- setBtcPaidStep(false);
- setOrderNumber("");
- router.push("/");
- };
+  const handleDone = () => {
+   clearCart();
+   setPhase("form");
+   setOrderNumber("");
+   router.push("/");
+  };
 
- const zelle = paymentMethod === "zelle";
- const chime = paymentMethod === "chime";
-
- return (
- <div className="min-h-screen bg-paper flex items-center justify-center p-6 text-ink">
- <div className="bg-white p-8 md:p-12 border border-hairline max-w-xl w-full space-y-6">
- <div className="text-center space-y-3">
- <div className="w-14 h-14 bg-canvas text-ink border border-hairline flex items-center justify-center mx-auto">
- <Clock size={28} />
- </div>
- <div>
- <h1 className="headline-serif text-3xl md:text-4xl mb-2">Order Received</h1>
- <p className="text-sm text-muted">
- Order: <span className="font-bold text-black">{orderNumber}</span>
- </p>
- </div>
- </div>
-
- {/* Honest status flow */}
- <div className="bg-canvas border border-hairline p-5 space-y-2.5">
- <p className="text-label text-ink">
- Payment Pending
- </p>
- <p className="text-[13px] text-ink-soft leading-relaxed">
- Your order is booked but <strong>not yet paid</strong>. It will only begin
- processing once payment is confirmed by our team ({paymentMethod === "bitcoin" ? "Bitcoin" : paymentMethod === "zelle" ? "Zelle" : "Chime"}).
- We&apos;ll confirm within minutes on WhatsApp.
- </p>
- <div className="space-y-1.5 pt-2">
- {[
- { label: "Order created", done: true },
- { label: "Payment pending", active: true },
- { label: "Payment confirmed", done: false },
- { label: "Processing & shipping", done: false },
- ].map((step, i) => (
- <div key={i} className="flex items-center gap-2.5">
- <span
- className={`w-4 h-4 flex items-center justify-center text-[9px] font-bold ${
- step.done
- ? "bg-black text-white"
- : step.active
- ? "border border-ink text-ink"
- : "border border-hairline text-muted"
- }`}
- >
- {step.done ? "✓" : ""}
- </span>
- <span className={`text-xs ${step.active ? "font-medium text-ink" : step.done ? "text-ink-soft" : "text-muted"}`}>
- {step.label}
- </span>
- </div>
- ))}
- </div>
- </div>
-
- {/* Payment action per method */}
- {paymentMethod === "bitcoin" && (
- <div className="space-y-4">
- <div className="bg-canvas border border-hairline p-5 space-y-4">
- <p className="text-sm font-bold">₿ Pay with Bitcoin</p>
- <div className="bg-canvas border border-hairline p-4 text-center">
- <p className="text-label text-ink-soft mb-1">Send exactly</p>
- <p className="text-2xl font-medium text-ink">${orderTotal.toFixed(2)}</p>
- <p className="text-[13px] text-muted mt-1">worth of Bitcoin (BTC)</p>
- </div>
- <div>
- <p className="text-xs uppercase tracking-wider font-bold text-ink-soft mb-2">To this Bitcoin address:</p>
- <div className="flex items-center gap-2 border border-hairline p-3 bg-canvas">
- <p className="flex-1 text-[13px] tracking-wide text-ink break-all leading-relaxed">{BITCOIN_ADDRESS}</p>
- <button
- type="button"
- onClick={handleCopyBtc}
- className={`flex-shrink-0 p-2 transition-colors ${
- btcCopied ? "bg-ink text-white" : "bg-canvas hover:bg-hairline text-ink-soft"
- }`}
- >
- {btcCopied ? <Check size={14} /> : <Copy size={14} />}
- </button>
- </div>
- </div>
- {!btcPaidStep ? (
- <button
- type="button"
- onClick={() => setBtcPaidStep(true)}
- className="btn-primary w-full"
- >
- ✅ I&apos;ve Paid
- </button>
- ) : (
- <div className="space-y-3">
- <p className="text-xs text-muted">
- Send us your transaction ID or a screenshot so we can verify and begin processing.
- </p>
- <button
- type="button"
- onClick={() => openWhatsAppAfter(buildWhatsAppUrl(buildOrderMessage("bitcoin")))}
- className="flex items-center justify-center gap-2 w-full bg-[#25D366] hover:bg-[#20bb5a] text-white py-3.5 text-sm font-bold uppercase tracking-wider transition-colors"
- >
- <MessageCircle size={16} /> Send Receipt on WhatsApp
- </button>
- </div>
- )}
- </div>
- <button
- type="button"
- onClick={handleDone}
- className="btn-outline w-full"
- >
- Return to Home
- </button>
- </div>
- )}
-
- {(zelle || chime) && (
- <div className="space-y-4">
- <div className={` border overflow-hidden ${zelle ? "border-hairline" : "border-hairline"}`}>
- <div className={`px-5 py-4 ${zelle ? "bg-ink" : "bg-ink"} text-white`}>
- <p className="font-bold text-sm">{zelle ? "💜 Pay via Zelle" : "🟢 Pay via Chime"}</p>
- <p className="text-xs mt-0.5 opacity-90">Complete payment with our team on WhatsApp</p>
- </div>
- <div className="px-5 py-5 space-y-4">
- <p className="text-xs text-muted leading-relaxed">
- Our team will send you the {zelle ? "Zelle" : "Chime"} payment details and confirm your order. No card
- or gift-card details are collected on this site.
- </p>
- <button
- type="button"
- onClick={() => openWhatsAppAfter(buildWhatsAppUrl(buildOrderMessage(paymentMethod)))}
- className="flex items-center justify-center gap-2 w-full bg-[#25D366] hover:bg-[#20bb5a] text-white py-3.5 text-sm font-bold uppercase tracking-wider transition-colors"
- >
- <MessageCircle size={16} /> Get {zelle ? "Zelle" : "Chime"} Details on WhatsApp
- </button>
- </div>
- </div>
- <button
- type="button"
- onClick={handleDone}
- className="btn-outline w-full"
- >
- I&apos;ll finish this in WhatsApp — Return to Home
- </button>
- </div>
- )}
- </div>
- </div>
- );
+  return (
+   <OrderTracker
+    orderNumber={orderNumber}
+    orderTotal={orderTotal || subtotal}
+    paymentMethod={paymentMethod}
+    email={formData.email}
+    giftCardBrandLabel={
+     GIFT_CARD_BRANDS.find((b) => b.id === giftCardData.brand)?.label ?? giftCardData.brand
+    }
+    giftCardLast4={giftCardData.code.trim().slice(-4).toUpperCase()}
+    whatsappHref={buildWhatsAppUrl(buildOrderMessage(paymentMethod))}
+    onDone={handleDone}
+   />
+  );
  }
+
 
  // ─── Main checkout form ─────────────────────────────────────────────────────
  return (
@@ -487,14 +352,13 @@ export default function CheckoutPage() {
  3. Payment Method
  </h2>
 
- <div className="grid grid-cols-3 gap-2 sm:gap-3">
+ <div className="grid grid-cols-3 gap-2 sm:gap-3 sm:grid-cols-5">
  {PAYMENT_METHODS.map((method) => (
  <button
  key={method.id}
  type="button"
  onClick={() => {
  setPaymentMethod(method.id);
- setBtcPaidStep(false);
  }}
  className={`py-3 px-2 text-[11px] sm:text-xs font-medium tracking-wide border transition-colors flex flex-col items-center justify-center gap-1.5 min-h-[64px] ${
  paymentMethod === method.id
@@ -507,9 +371,79 @@ export default function CheckoutPage() {
  ))}
  </div>
 
+ {paymentMethod === "gift_card" && (
+ <div className="bg-canvas border border-hairline p-4 sm:p-5 space-y-3">
+ <p className="text-sm font-bold flex items-center gap-2">
+ <Gift size={14} /> Gift Card Details
+ </p>
+ <p className="text-[12px] text-muted leading-relaxed">
+ We accept Amazon, Visa/Mastercard prepaid, Steam, Apple, Google Play and more. Your code is
+ stored securely and verified by our team on WhatsApp — your order ships once it checks out.
+ Never share your code anywhere else.
+ </p>
+ <div>
+ <label className="block text-xs uppercase tracking-wider font-bold text-ink-soft mb-1">
+ Card Brand *
+ </label>
+ <select
+ value={giftCardData.brand}
+ onChange={(e) => setGiftCardData({ ...giftCardData, brand: e.target.value })}
+ className="w-full px-4 py-3 border border-hairline text-sm outline-none focus:border-ink transition-colors bg-white"
+ >
+ {GIFT_CARD_BRANDS.map((brand) => (
+ <option key={brand.id} value={brand.id}>{brand.label}</option>
+ ))}
+ </select>
+ </div>
+ <div>
+ <label className="block text-xs uppercase tracking-wider font-bold text-ink-soft mb-1">
+ Gift Card Code *
+ </label>
+ <input
+ type="text"
+ required
+ autoComplete="off"
+ placeholder="e.g. A1B2C3D4E5F6G7H8"
+ value={giftCardData.code}
+ onChange={(e) => setGiftCardData({ ...giftCardData, code: e.target.value })}
+ className="w-full px-4 py-3 border border-hairline text-sm outline-none focus:border-ink transition-colors bg-white font-mono"
+ />
+ </div>
+ <div className="grid grid-cols-2 gap-3">
+ <div>
+ <label className="block text-xs uppercase tracking-wider font-bold text-ink-soft mb-1">
+ PIN (if any)
+ </label>
+ <input
+ type="text"
+ autoComplete="off"
+ placeholder="1234"
+ value={giftCardData.pin}
+ onChange={(e) => setGiftCardData({ ...giftCardData, pin: e.target.value })}
+ className="w-full px-4 py-3 border border-hairline text-sm outline-none focus:border-ink transition-colors bg-white font-mono"
+ />
+ </div>
+ <div>
+ <label className="block text-xs uppercase tracking-wider font-bold text-ink-soft mb-1">
+ Claimed Balance ($)
+ </label>
+ <input
+ type="number"
+ min="0"
+ step="0.01"
+ placeholder="100.00"
+ value={giftCardData.claimedValue}
+ onChange={(e) => setGiftCardData({ ...giftCardData, claimedValue: e.target.value })}
+ className="w-full px-4 py-3 border border-hairline text-sm outline-none focus:border-ink transition-colors bg-white font-mono"
+ />
+ </div>
+ </div>
+ </div>
+ )}
+
  <p className="text-[13px] text-muted leading-relaxed">
- Payment is completed directly with our team. Card and gift-card processing
- are not currently offered — we never ask for card numbers or codes.
+ Payment is completed directly with our team. Gift card codes are verified by our team before
+ your order is processed — we never ask for your card PIN anywhere else.
  </p>
 
  <button

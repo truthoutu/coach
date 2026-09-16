@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
 import { prisma, hasDatabase } from "@/lib/prisma";
+import {
+  encryptGiftCardSecret,
+  last4OfCode,
+  validateGiftCardSubmission,
+} from "@/lib/gift-cards";
 
 export const dynamic = "force-dynamic";
 
@@ -16,7 +21,20 @@ export async function GET() {
   try {
     const orders = await prisma.order.findMany({
       orderBy: { createdAt: "desc" },
-      include: { items: true },
+      include: {
+        items: true,
+        // Gift card codes are sensitive: only masked fields leave the server.
+        giftCardSubmission: {
+          select: {
+            id: true,
+            brand: true,
+            codeLast4: true,
+            claimedValue: true,
+            status: true,
+            createdAt: true,
+          },
+        },
+      },
     });
     return NextResponse.json({ orders });
   } catch (error) {
@@ -49,7 +67,7 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
-    const methods = ["BITCOIN", "ZELLE", "CHIME"];
+    const methods = ["BITCOIN", "ZELLE", "CHIME", "CASHAPP", "GIFT_CARD"];
     if (!methods.includes(paymentMethod)) {
       return NextResponse.json(
         { error: "Invalid payment method" },
@@ -58,6 +76,29 @@ export async function POST(request: Request) {
     }
     if (!Array.isArray(items) || items.length === 0) {
       return NextResponse.json({ error: "Order has no items" }, { status: 400 });
+    }
+
+    // ── Gift card submission (GIFT_CARD method only) ───────────────────────
+    // Codes are validated, then encrypted before they ever touch the database.
+    let giftCardRecord: {
+      brand: string;
+      codeEncrypted: string;
+      codeLast4: string;
+      pinEncrypted: string | null;
+      claimedValue: number | null;
+    } | null = null;
+    if (paymentMethod === "GIFT_CARD") {
+      const result = validateGiftCardSubmission(body.giftCard ?? {});
+      if (!result.ok) {
+        return NextResponse.json({ error: result.error }, { status: 400 });
+      }
+      giftCardRecord = {
+        brand: result.brand,
+        codeEncrypted: encryptGiftCardSecret(result.code),
+        codeLast4: last4OfCode(result.code),
+        pinEncrypted: result.pin ? encryptGiftCardSecret(result.pin) : null,
+        claimedValue: result.claimedValue,
+      };
     }
 
     // ── Server-side authoritative totals ──────────────────────────────────
@@ -118,38 +159,93 @@ export async function POST(request: Request) {
     const taxTotal = 0;
     const total = itemsTotal + shippingCost + taxTotal;
 
-    // ── Persist ───────────────────────────────────────────────────────────
-    const order = await prisma.order.create({
-      data: {
-        number: generateOrderNumber(),
-        customerName: `${firstName} ${lastName}`.trim(),
-        email,
-        phone: phone || null,
-        address,
-        city,
-        postalCode,
-        country,
-        itemsTotal,
-        shippingCost,
-        taxTotal,
-        total,
-        currency: "USD",
-        status: "PENDING_PAYMENT",
-        paymentMethod,
-        notes: notes || null,
-        items: {
-          create: validated.map((v) => ({
-            productId: v.productId,
-            name: v.name,
-            sku: v.sku,
-            price: v.price,
-            currency: v.currency,
-            quantity: v.quantity,
-            image: v.image,
-          })),
+    // ── Persist (order + gift card submission atomically) ─────────────────
+    const order = await prisma.$transaction(async (tx) => {
+      const created = await tx.order.create({
+        data: {
+          number: generateOrderNumber(),
+          customerName: `${firstName} ${lastName}`.trim(),
+          email,
+          phone: phone || null,
+          address,
+          city,
+          postalCode,
+          country,
+          itemsTotal,
+          shippingCost,
+          taxTotal,
+          total,
+          currency: "USD",
+          status: "PENDING_PAYMENT",
+          paymentMethod,
+          notes: notes || null,
+          items: {
+            create: validated.map((v) => ({
+              productId: v.productId,
+              name: v.name,
+              sku: v.sku,
+              price: v.price,
+              currency: v.currency,
+              quantity: v.quantity,
+              image: v.image,
+            })),
+          },
         },
-      },
-      include: { items: true },
+        include: { items: true },
+      });
+
+      if (giftCardRecord) {
+        await tx.giftCardSubmission.create({
+          data: {
+            orderId: created.id,
+            brand: giftCardRecord.brand,
+            codeEncrypted: giftCardRecord.codeEncrypted,
+            codeLast4: giftCardRecord.codeLast4,
+            pinEncrypted: giftCardRecord.pinEncrypted,
+            claimedValue: giftCardRecord.claimedValue,
+            status: "SUBMITTED",
+          },
+        });
+      }
+
+      // ── Seed the live thread: the customer "message" the admin is notified about ──
+      // ("Someone wants to buy [bag] via [method]") + a gift-card pointer if present.
+      const methodLabel =
+        paymentMethod === "GIFT_CARD"
+          ? "Gift Card"
+          : paymentMethod === "CASHAPP"
+            ? "Cash App"
+            : paymentMethod.charAt(0) + paymentMethod.slice(1).toLowerCase();
+      const itemSummary = validated
+        .map((v) => `${v.name} ×${v.quantity}`)
+        .join(", ")
+        .slice(0, 400);
+      const newOrderMsg =
+        `🛍️ New order — ${itemSummary} — Total $${total.toFixed(2)} via ${methodLabel}.`;
+      await tx.orderMessage.create({
+        data: {
+          orderId: created.id,
+          senderRole: "CUSTOMER",
+          body: newOrderMsg,
+          readByAdmin: false,
+          readByCustomer: true,
+        },
+      });
+      if (giftCardRecord) {
+        const giftMsg =
+          `🎁 Gift card: ${giftCardRecord.brand.replace(/_/g, " ")} •••• ${giftCardRecord.codeLast4} — please verify in the Gift Cards tab.`;
+        await tx.orderMessage.create({
+          data: {
+            orderId: created.id,
+            senderRole: "CUSTOMER",
+            body: giftMsg,
+            readByAdmin: false,
+            readByCustomer: true,
+          },
+        });
+      }
+
+      return created;
     });
 
     return NextResponse.json(

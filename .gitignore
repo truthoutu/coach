@@ -52,4 +52,5 @@ npm-install.err
 
 # helper scripts
 audit_*.py
+run_build.py
 install-next-retry.cmd

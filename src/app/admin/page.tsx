@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import {
   LayoutDashboard,
@@ -18,6 +18,8 @@ import {
   X,
   Eye,
   Image as ImageIcon,
+  Gift,
+  Send,
 } from "lucide-react";
 
 interface Product {
@@ -66,10 +68,66 @@ interface Order {
   items: OrderItem[];
 }
 
+interface GiftCardSubmission {
+  id: string;
+  brand: string;
+  codeLast4: string;
+  claimedValue: string | null;
+  status: string;
+  reviewNotes: string | null;
+  createdAt: string;
+  order: {
+    id: string;
+    number: string;
+    customerName: string;
+    email: string;
+    phone: string | null;
+    total: string;
+    status: string;
+  };
+}
+
+interface AdminMessage {
+  id: string;
+  senderRole: "CUSTOMER" | "ADMIN";
+  body: string;
+  createdAt: string;
+}
+
 const CATEGORIES = ["Bags", "Shoes", "Wallets", "Accessories", "Small Leather Goods", "Ready-To-Wear"];
 
+// ── Quick payment details ("tags") the admin sends to customers ─────────────
+// ⚠️ EDIT THESE to the store's real handles / addresses.
+const PAYMENT_TAGS: { label: string; body: string }[] = [
+  { label: "💜 Zelle", body: "💜 Send your Zelle payment to: 505-800-6451 (name: COACH 1). Reply \"I have paid\" here once sent." },
+  { label: "💚 Cash App", body: "💚 Send your Cash App payment to: $CoachOne. Reply \"I have paid\" here once sent." },
+  { label: "🟢 Chime", body: "🟢 Send your Chime payment to: 505-800-6451. Reply \"I have paid\" here once sent." },
+  { label: "₿ Bitcoin", body: "₿ Send exactly the order total in BTC to: bc1qjs86eudh7t00de2f9e94zy6p8pcznjhyqqh3w8 — then reply here with the transaction ID." },
+];
+
+/** Short notification beep (WebAudio). Safe no-op when unsupported. */
+function playBeep() {
+  try {
+    const Ctx =
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    const ctx = new Ctx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.frequency.value = 880;
+    gain.gain.setValueAtTime(0.15, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.4);
+  } catch {
+    /* silent */
+  }
+}
+
 export default function AdminPage() {
-  const [activeNav, setActiveNav] = useState<"overview" | "products" | "campaigns" | "orders">("overview");
+  const [activeNav, setActiveNav] = useState<"overview" | "products" | "campaigns" | "orders" | "giftcards">("overview");
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
 
@@ -109,6 +167,27 @@ export default function AdminPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(true);
 
+  // Gift card submissions state
+  const [giftCards, setGiftCards] = useState<GiftCardSubmission[]>([]);
+  const [giftCardsLoading, setGiftCardsLoading] = useState(true);
+  const [revealedCodes, setRevealedCodes] = useState<Record<string, string>>({});
+
+  // Live notification state (polled from /api/admin/live every 5s)
+  const [liveStats, setLiveStats] = useState({ pendingOrders: 0, unreadCustomerMessages: 0, pendingGiftCards: 0 });
+  const [liveOn, setLiveOn] = useState(true);
+  const [soundOn, setSoundOn] = useState(true);
+  const livePrevRef = useRef({ pendingOrders: 0, unreadCustomerMessages: 0, pendingGiftCards: 0 });
+  const liveInitRef = useRef(false);
+
+  // Per-order live thread state (chat with customer + actions)
+  const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
+  const [threadMessages, setThreadMessages] = useState<Record<string, AdminMessage[]>>({});
+  const [threadLoading, setThreadLoading] = useState<Record<string, boolean>>({});
+  const [replyInputs, setReplyInputs] = useState<Record<string, string>>({});
+  const [sendingReply, setSendingReply] = useState<Record<string, boolean>>({});
+  const [actingOrder, setActingOrder] = useState<Record<string, boolean>>({});
+  const threadEndRef = useRef<HTMLDivElement>(null);
+
   // Upload & Toast state
   const [uploading, setUploading] = useState(false);
   const [toast, setToast] = useState<{ text: string; type: "success" | "error" } | null>(null);
@@ -117,6 +196,7 @@ export default function AdminPage() {
     fetchProducts();
     fetchCampaigns();
     fetchOrders();
+    fetchGiftCards();
   }, []);
 
   async function fetchProducts() {
@@ -158,6 +238,233 @@ export default function AdminPage() {
       console.error(err);
     } finally {
       setOrdersLoading(false);
+    }
+  }
+
+  async function fetchGiftCards() {
+    setGiftCardsLoading(true);
+    try {
+      const res = await fetch("/api/gift-cards");
+      if (res.ok) {
+        const data = await res.json();
+        setGiftCards(data.submissions || []);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setGiftCardsLoading(false);
+    }
+  }
+
+  async function handleGiftCardAction(id: string, action: "verify" | "reject" | "reveal") {
+    try {
+      if (action === "reveal") {
+        const res = await fetch(`/api/gift-cards/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "reveal" }),
+        });
+        const data = await res.json();
+        if (res.ok) {
+          setRevealedCodes((prev) => ({
+            ...prev,
+            [id]: data.pin ? `${data.code} · PIN: ${data.pin}` : data.code,
+          }));
+        } else {
+          setToast({ text: data.error || "Could not reveal this code.", type: "error" });
+        }
+        return;
+      }
+
+      if (action === "verify") {
+        const confirmOrder = window.confirm(
+          "Mark this gift card as verified?\n\nOK = verify the card AND confirm the linked order.\nCancel = verify the card only."
+        );
+        const res = await fetch(`/api/gift-cards/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "verify", confirmOrder }),
+        });
+        const data = await res.json();
+        if (res.ok) {
+          setToast({ text: "Gift card marked as verified.", type: "success" });
+          fetchGiftCards();
+          fetchOrders();
+        } else {
+          setToast({ text: data.error || "Could not verify this card.", type: "error" });
+        }
+        return;
+      }
+
+      // reject
+      const reason = window.prompt("Reason for rejecting this gift card (optional):") ?? "";
+      const res = await fetch(`/api/gift-cards/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "reject", reviewNotes: reason || undefined }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setToast({ text: "Gift card rejected. Keep the order on hold.", type: "success" });
+        fetchGiftCards();
+      } else {
+        setToast({ text: data.error || "Could not reject this card.", type: "error" });
+      }
+    } catch (err) {
+      console.error(err);
+      setToast({ text: "Action failed. Please try again.", type: "error" });
+    }
+  }
+
+  // ── Live notifications: poll /api/admin/live every 5s ─────────────────────
+  // Compares counts with the previous snapshot so the beep/toast only fires
+  // when something genuinely new arrives (order, customer message, card).
+  useEffect(() => {
+    if (!liveOn) return;
+    let cancelled = false;
+
+    async function pollAdminLive() {
+      try {
+        const res = await fetch("/api/admin/live");
+        if (!res.ok || cancelled) return;
+        const data = await res.json();
+        const next = data.stats ?? { pendingOrders: 0, unreadCustomerMessages: 0, pendingGiftCards: 0 };
+        setLiveStats(next);
+
+        const prev = livePrevRef.current;
+        if (liveInitRef.current) {
+          const events: string[] = [];
+          if (next.pendingOrders > prev.pendingOrders) {
+            events.push(`🛍️ New order received (${next.pendingOrders - prev.pendingOrders} new) — open Orders.`);
+          }
+          if (next.unreadCustomerMessages > prev.unreadCustomerMessages) {
+            events.push(`💬 New customer message (${next.unreadCustomerMessages - prev.unreadCustomerMessages} unread) — open the order thread.`);
+          }
+          if (next.pendingGiftCards > prev.pendingGiftCards) {
+            events.push(`🎁 New gift card submitted (${next.pendingGiftCards - prev.pendingGiftCards} awaiting check).`);
+          }
+          if (events.length > 0) {
+            if (soundOn) playBeep();
+            setToast({ text: events.join(" "), type: "success" });
+            fetchOrders();
+            fetchGiftCards();
+          } else if (
+            next.pendingOrders !== prev.pendingOrders ||
+            next.unreadCustomerMessages !== prev.unreadCustomerMessages ||
+            next.pendingGiftCards !== prev.pendingGiftCards
+          ) {
+            // Counts decreased (order confirmed, thread read elsewhere) — refresh quietly.
+            fetchOrders();
+            fetchGiftCards();
+          }
+        } else {
+          liveInitRef.current = true;
+        }
+        livePrevRef.current = next;
+      } catch {
+        /* offline / DB down — next tick retries */
+      }
+    }
+
+    pollAdminLive();
+    const id = setInterval(pollAdminLive, 5000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [liveOn, soundOn]);
+
+  // ── Per-order live thread (chat + actions) ─────────────────────────────────
+  async function loadThread(orderNumber: string) {
+    setThreadLoading((prev) => ({ ...prev, [orderNumber]: true }));
+    try {
+      const res = await fetch(`/api/orders/${encodeURIComponent(orderNumber)}/messages`);
+      if (res.ok) {
+        const data = await res.json();
+        setThreadMessages((prev) => ({ ...prev, [orderNumber]: data.messages || [] }));
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setThreadLoading((prev) => ({ ...prev, [orderNumber]: false }));
+    }
+  }
+
+  function toggleOrderThread(ord: Order) {
+    if (expandedOrder === ord.number) {
+      setExpandedOrder(null);
+      return;
+    }
+    setExpandedOrder(ord.number);
+    loadThread(ord.number);
+  }
+
+  async function sendQuickTag(orderNumber: string, body: string) {
+    setSendingReply((prev) => ({ ...prev, [orderNumber]: true }));
+    try {
+      const res = await fetch(`/api/orders/${encodeURIComponent(orderNumber)}/messages`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ admin: true, body }),
+      });
+      if (res.ok) {
+        loadThread(orderNumber);
+        setToast({ text: "Payment details sent to the customer.", type: "success" });
+      } else {
+        setToast({ text: "Could not send. Please try again.", type: "error" });
+      }
+    } catch (err) {
+      console.error(err);
+      setToast({ text: "Could not send. Please try again.", type: "error" });
+    } finally {
+      setSendingReply((prev) => ({ ...prev, [orderNumber]: false }));
+    }
+  }
+
+  async function sendAdminReply(orderNumber: string) {
+    const text = (replyInputs[orderNumber] || "").trim();
+    if (!text) return;
+    setReplyInputs((prev) => ({ ...prev, [orderNumber]: "" }));
+    await sendQuickTag(orderNumber, text);
+  }
+
+  // Keep the open thread fresh while it is expanded.
+  useEffect(() => {
+    if (!expandedOrder || !liveOn) return;
+    const id = setInterval(() => loadThread(expandedOrder), 4000);
+    return () => clearInterval(id);
+  }, [expandedOrder, liveOn]);
+
+  useEffect(() => {
+    threadEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [expandedOrder, threadMessages]);
+
+  async function handleOrderStatus(orderNumber: string, action: "confirm" | "cancel") {
+    const label = action === "confirm" ? "Confirm this order's payment?" : "Cancel this order?";
+    if (!window.confirm(label)) return;
+    setActingOrder((prev) => ({ ...prev, [orderNumber]: true }));
+    try {
+      const res = await fetch(`/api/orders/${encodeURIComponent(orderNumber)}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setToast({
+          text: action === "confirm" ? "Payment confirmed — the customer sees it live. ✅" : "Order cancelled.",
+          type: "success",
+        });
+        fetchOrders();
+        fetchGiftCards();
+      } else {
+        setToast({ text: data.error || "Could not update this order.", type: "error" });
+      }
+    } catch (err) {
+      console.error(err);
+      setToast({ text: "Could not update this order.", type: "error" });
+    } finally {
+      setActingOrder((prev) => ({ ...prev, [orderNumber]: false }));
     }
   }
 
@@ -380,6 +687,20 @@ export default function AdminPage() {
               </div>
               <span className="bg-slate-800 text-slate-300 text-[10px] font-mono px-2 py-0.5 rounded-full">{orders.length}</span>
             </button>
+
+            <button
+              onClick={() => setActiveNav("giftcards")}
+              className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-lg text-xs uppercase tracking-wider font-semibold transition-colors justify-between cursor-pointer ${
+                activeNav === "giftcards" ? "bg-white/10 text-white font-bold" : "text-slate-400 hover:text-white hover:bg-white/5"
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <Gift size={18} /> Gift Cards
+              </div>
+              <span className="bg-slate-800 text-slate-300 text-[10px] font-mono px-2 py-0.5 rounded-full">
+                {giftCards.filter((g) => g.status === "SUBMITTED").length}
+              </span>
+            </button>
           </nav>
         </div>
 
@@ -441,6 +762,12 @@ export default function AdminPage() {
                 >
                   <Package size={18} /> Orders ({orders.length})
                 </button>
+                <button
+                  onClick={() => { setActiveNav("giftcards"); setMobileSidebarOpen(false); }}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded text-xs uppercase tracking-wider font-semibold text-slate-300"
+                >
+                  <Gift size={18} /> Gift Cards ({giftCards.filter((g) => g.status === "SUBMITTED").length})
+                </button>
               </nav>
             </div>
 
@@ -467,10 +794,31 @@ export default function AdminPage() {
               {activeNav === "products" && "Product Catalog Management"}
               {activeNav === "campaigns" && "Homepage Banner Pictures"}
               {activeNav === "orders" && "Customer Orders & Transactions"}
+              {activeNav === "giftcards" && "Gift Card Payment Verifications"}
             </h1>
           </div>
 
           <div className="flex items-center gap-3">
+            {/* Live notifications toggle */}
+            <button
+              onClick={() => setLiveOn((v) => !v)}
+              title={liveOn ? "Pause live notifications" : "Resume live notifications"}
+              className={`flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider px-2.5 py-1.5 rounded-full border transition-colors cursor-pointer ${
+                liveOn
+                  ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                  : "bg-gray-100 text-gray-500 border-gray-200"
+              }`}
+            >
+              <span className={`w-1.5 h-1.5 rounded-full ${liveOn ? "bg-emerald-500 animate-pulse" : "bg-gray-400"}`} />
+              {liveOn ? "Live" : "Paused"}
+            </button>
+            <button
+              onClick={() => setSoundOn((v) => !v)}
+              title={soundOn ? "Mute notification sound" : "Unmute notification sound"}
+              className="text-gray-400 hover:text-black text-sm px-1.5 py-1.5 cursor-pointer"
+            >
+              {soundOn ? "🔔" : "🔕"}
+            </button>
             {activeNav === "products" && (
               <button
                 onClick={() => setIsAddModalOpen(true)}
@@ -840,14 +1188,24 @@ export default function AdminPage() {
           {/* VIEW 4: ORDERS */}
           {activeNav === "orders" && (
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 space-y-6">
-              <div className="flex items-center justify-between">
-                <h2 className="font-serif text-xl font-bold">All Customer Orders</h2>
-                <button
-                  onClick={fetchOrders}
-                  className="text-xs font-mono font-semibold text-gray-600 hover:text-black flex items-center gap-1.5 cursor-pointer"
-                >
-                  <RefreshCw size={14} /> Refresh
-                </button>
+              <div className="flex items-center justify-between flex-wrap gap-3">
+                <div>
+                  <h2 className="font-serif text-xl font-bold">All Customer Orders</h2>
+                  <p className="text-[11px] text-gray-500 mt-0.5">Click an order to chat, send payment details & confirm.</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  {(liveStats.pendingOrders > 0 || liveStats.unreadCustomerMessages > 0) && (
+                    <span className="bg-rose-100 text-rose-800 text-[10px] font-bold uppercase px-2.5 py-1 rounded-full">
+                      {liveStats.pendingOrders} pending · {liveStats.unreadCustomerMessages} unread
+                    </span>
+                  )}
+                  <button
+                    onClick={fetchOrders}
+                    className="text-xs font-mono font-semibold text-gray-600 hover:text-black flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <RefreshCw size={14} /> Refresh
+                  </button>
+                </div>
               </div>
               {ordersLoading ? (
                 <div className="py-16 text-center text-gray-400 font-mono text-xs">Loading orders...</div>
@@ -856,45 +1214,308 @@ export default function AdminPage() {
                   No orders yet. Orders placed at checkout will appear here.
                 </div>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs">
-                    <thead className="bg-gray-50 text-gray-500 uppercase tracking-wider font-semibold border-b border-gray-200">
-                      <tr>
-                        <th className="px-6 py-3">Order ID</th>
-                        <th className="px-6 py-3">Customer</th>
-                        <th className="px-6 py-3">Email</th>
-                        <th className="px-6 py-3">Items</th>
-                        <th className="px-6 py-3">Amount</th>
-                        <th className="px-6 py-3">Payment</th>
-                        <th className="px-6 py-3">Status</th>
-                        <th className="px-6 py-3">Date</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-200">
-                      {orders.map((ord) => (
-                        <tr key={ord.id}>
-                          <td className="px-6 py-4 font-mono font-bold">{ord.number}</td>
-                          <td className="px-6 py-4">{ord.customerName}</td>
-                          <td className="px-6 py-4 text-gray-700">{ord.email}</td>
-                          <td className="px-6 py-4 text-gray-700">
-                            {ord.items.map((it) => (
-                              <span key={it.id} className="block">{it.name} ×{it.quantity}</span>
-                            ))}
-                          </td>
-                          <td className="px-6 py-4 font-mono font-bold">${ord.total.toFixed(2)}</td>
-                          <td className="px-6 py-4 font-mono text-gray-600">{ord.paymentMethod}</td>
-                          <td className="px-6 py-4">
-                            <span className="bg-amber-100 text-amber-800 text-[10px] font-bold uppercase px-2.5 py-1 rounded-full">
-                              {ord.status.replace(/_/g, " ")}
+                <div className="space-y-3">
+                  {orders.map((ord) => {
+                    const isOpen = expandedOrder === ord.number;
+                    const thread = threadMessages[ord.number] || [];
+                    const reply = replyInputs[ord.number] || "";
+                    const pending = ord.status === "PENDING_PAYMENT";
+                    const lastCustomerMsg = [...thread].reverse().find((m) => m.senderRole === "CUSTOMER");
+                    return (
+                      <div
+                        key={ord.id}
+                        className={`border rounded-xl overflow-hidden transition-colors ${
+                          pending ? "border-amber-300 bg-amber-50/40" : "border-gray-200 bg-white"
+                        }`}
+                      >
+                        <button
+                          onClick={() => toggleOrderThread(ord)}
+                          className="w-full flex items-center gap-3 px-4 py-3.5 text-left hover:bg-gray-50/60 transition-colors cursor-pointer"
+                        >
+                          <span className="font-mono font-bold text-sm">{ord.number}</span>
+                          <span className="text-xs font-medium truncate">{ord.customerName}</span>
+                          <span className="hidden sm:inline text-[11px] text-gray-500 font-mono truncate max-w-56">
+                            {ord.items.map((it) => `${it.name} ×${it.quantity}`).join(", ")}
+                          </span>
+                          <span className="text-[11px] font-mono font-bold ml-auto whitespace-nowrap">
+                            ${ord.total.toFixed(2)}
+                          </span>
+                          <span className="hidden md:inline text-[10px] font-mono text-gray-500">{ord.paymentMethod}</span>
+                          <span
+                            className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full whitespace-nowrap ${
+                              pending
+                                ? "bg-amber-100 text-amber-800"
+                                : ord.status === "CONFIRMED" || ord.status === "DELIVERED"
+                                  ? "bg-emerald-100 text-emerald-800"
+                                  : "bg-gray-100 text-gray-600"
+                            }`}
+                          >
+                            {ord.status.replace(/_/g, " ")}
+                          </span>
+                          {lastCustomerMsg && !isOpen && (
+                            <span className="text-[10px] font-bold uppercase bg-rose-600 text-white px-2 py-0.5 rounded-full whitespace-nowrap">
+                              New msg
                             </span>
-                          </td>
-                          <td className="px-6 py-4 font-mono text-gray-500">{new Date(ord.createdAt).toLocaleString()}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                          )}
+                          <span className="text-gray-400 text-xs">{isOpen ? "▲" : "▼"}</span>
+                        </button>
+                        {/* Expanded live thread */}
+                        {isOpen && (
+                          <div className="border-t border-gray-200 bg-white px-4 py-4 space-y-4">
+                            <div className="flex flex-wrap gap-x-6 gap-y-1 text-[11px] text-gray-600">
+                              <span>
+                                <span className="font-bold">Items:</span>{" "}
+                                {ord.items.map((it) => `${it.name} ×${it.quantity}`).join(", ")}
+                              </span>
+                              <span>
+                                <span className="font-bold">Contact:</span> {ord.email}
+                              </span>
+                              <span className="font-mono text-gray-400">
+                                {new Date(ord.createdAt).toLocaleString()}
+                              </span>
+                            </div>
+                            {pending && (
+                              <div className="space-y-2">
+                                <p className="text-[10px] font-bold uppercase tracking-wider text-gray-500">
+                                  Send payment details to customer:
+                                </p>
+                                <div className="flex flex-wrap gap-2">
+                                  {PAYMENT_TAGS.map((tag) => (
+                                    <button
+                                      key={tag.label}
+                                      onClick={() => sendQuickTag(ord.number, tag.body)}
+                                      disabled={sendingReply[ord.number]}
+                                      className="text-[11px] font-bold bg-slate-900 hover:bg-black text-white px-3 py-2 rounded-lg transition-colors disabled:opacity-50 cursor-pointer"
+                                    >
+                                      {tag.label}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            <div className="border border-gray-200 rounded-xl overflow-hidden">
+                              <div className="px-3.5 py-2.5 border-b border-gray-100 flex items-center justify-between bg-gray-50/60">
+                                <p className="text-[11px] font-bold">Live thread with {ord.customerName}</p>
+                                <span className="text-[10px] uppercase tracking-wider text-gray-400 flex items-center gap-1.5">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> Live
+                                </span>
+                              </div>
+                              <div className="px-3.5 py-3 space-y-2.5 max-h-64 overflow-y-auto">
+                                {threadLoading[ord.number] ? (
+                                  <p className="text-[11px] text-gray-400 font-mono py-3 text-center">Loading thread…</p>
+                                ) : thread.length === 0 ? (
+                                  <p className="text-[11px] text-gray-400 py-2">
+                                    No messages yet — the customer is waiting for your payment details.
+                                  </p>
+                                ) : (
+                                  thread.map((m) => (
+                                    <div
+                                      key={m.id}
+                                      className={`max-w-[88%] rounded-lg px-3 py-2 text-[12px] leading-relaxed ${
+                                        m.senderRole === "ADMIN"
+                                          ? "bg-gray-100 border border-gray-200 text-gray-900"
+                                          : "bg-slate-900 text-white ml-auto"
+                                      }`}
+                                    >
+                                      <p className="whitespace-pre-wrap break-words">{m.body}</p>
+                                      <p className={`text-[10px] mt-1 ${m.senderRole === "ADMIN" ? "text-gray-400" : "text-white/60"}`}>
+                                        {m.senderRole === "ADMIN" ? "You" : ord.customerName} ·{" "}
+                                        {new Date(m.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                                      </p>
+                                    </div>
+                                  ))
+                                )}
+                                <div ref={threadEndRef} />
+                              </div>
+                              <form
+                                onSubmit={(e) => {
+                                  e.preventDefault();
+                                  sendAdminReply(ord.number);
+                                }}
+                                className="px-3.5 py-3 border-t border-gray-100 flex items-center gap-2"
+                              >
+                                <input
+                                  type="text"
+                                  placeholder="Write a reply…"
+                                  value={reply}
+                                  onChange={(e) => setReplyInputs((prev) => ({ ...prev, [ord.number]: e.target.value }))}
+                                  maxLength={1000}
+                                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none focus:ring-1 focus:ring-black"
+                                />
+                                <button
+                                  type="submit"
+                                  disabled={sendingReply[ord.number] || !reply.trim()}
+                                  className="p-2 bg-slate-900 text-white rounded-lg hover:bg-black transition-colors disabled:opacity-50 cursor-pointer"
+                                  aria-label="Send reply"
+                                >
+                                  {sendingReply[ord.number] ? <RefreshCw size={14} className="animate-spin" /> : <Send size={14} />}
+                                </button>
+                              </form>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              {pending ? (
+                                <>
+                                  <button
+                                    onClick={() => handleOrderStatus(ord.number, "confirm")}
+                                    disabled={actingOrder[ord.number]}
+                                    className="text-[11px] font-bold uppercase bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-lg transition-colors disabled:opacity-50 cursor-pointer flex items-center gap-1.5"
+                                  >
+                                    <CheckCircle2 size={14} /> Confirm Payment ✅
+                                  </button>
+                                  <button
+                                    onClick={() => handleOrderStatus(ord.number, "cancel")}
+                                    disabled={actingOrder[ord.number]}
+                                    className="text-[11px] font-bold uppercase bg-white border border-rose-300 text-rose-700 hover:bg-rose-50 px-4 py-2.5 rounded-lg transition-colors disabled:opacity-50 cursor-pointer"
+                                  >
+                                    Decline / Cancel
+                                  </button>
+                                </>
+                              ) : (
+                                <button
+                                  onClick={() => loadThread(ord.number)}
+                                  className="text-[11px] font-semibold text-gray-500 hover:text-black flex items-center gap-1.5 cursor-pointer"
+                                >
+                                  <RefreshCw size={12} /> Refresh thread
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
+            </div>
+          )}
+
+          {/* VIEW 5: GIFT CARD VERIFICATIONS */}
+          {activeNav === "giftcards" && (
+            <div className="space-y-8">
+              {/* Explanation Banner */}
+              <div className="bg-slate-900 text-white p-6 rounded-xl border border-slate-800 flex items-start gap-4">
+                <div className="w-10 h-10 bg-white/10 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5 text-white">
+                  <Gift size={20} />
+                </div>
+                <div>
+                  <h3 className="font-serif text-lg font-bold">Gift Card Payment Verifications</h3>
+                  <p className="text-xs text-slate-300 leading-relaxed mt-1">
+                    Customers paying with a gift card submit their code at checkout. Verify each code with the
+                    issuer, then mark it <span className="font-bold">Verified</span> (optionally confirming the
+                    linked order) or <span className="font-bold">Rejected</span>. Codes are stored encrypted —
+                    only the last 4 characters show here until you reveal one.
+                  </p>
+                </div>
+              </div>
+
+              <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
+                <h2 className="font-serif text-lg font-bold border-b border-gray-200 pb-3 mb-2">Submissions</h2>
+                {giftCardsLoading ? (
+                  <div className="py-16 text-center text-gray-400 font-mono text-xs">Loading gift card submissions...</div>
+                ) : giftCards.length === 0 ? (
+                  <div className="py-16 text-center text-gray-500 font-serif text-sm">
+                    No gift card submissions yet. Orders paid by gift card will appear here.
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-gray-50 text-gray-500 uppercase tracking-wider font-semibold border-b border-gray-200">
+                        <tr>
+                          <th className="px-6 py-3">Order</th>
+                          <th className="px-6 py-3">Customer</th>
+                          <th className="px-6 py-3">Card</th>
+                          <th className="px-6 py-3">Claimed</th>
+                          <th className="px-6 py-3">Order Status</th>
+                          <th className="px-6 py-3">Card Status</th>
+                          <th className="px-6 py-3">Actions</th>
+                          <th className="px-6 py-3">Date</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200">
+                        {giftCards.map((sub) => (
+                          <tr key={sub.id}>
+                            <td className="px-6 py-4 font-mono font-bold">{sub.order.number}</td>
+                            <td className="px-6 py-4">
+                              <span className="block">{sub.order.customerName}</span>
+                              <span className="text-gray-500">{sub.order.email}</span>
+                            </td>
+                            <td className="px-6 py-4">
+                              <span className="block font-semibold">{sub.brand.replace(/_/g, " ")}</span>
+                              {revealedCodes[sub.id] ? (
+                                <span className="font-mono text-[11px] bg-gray-100 px-2 py-1 rounded">{revealedCodes[sub.id]}</span>
+                              ) : (
+                                <span className="font-mono text-gray-500">•••• {sub.codeLast4}</span>
+                              )}
+                            </td>
+                            <td className="px-6 py-4 font-mono">
+                              {sub.claimedValue ? `$${Number(sub.claimedValue).toFixed(2)}` : "—"}
+                            </td>
+                            <td className="px-6 py-4">
+                              <span className="bg-amber-100 text-amber-800 text-[10px] font-bold uppercase px-2.5 py-1 rounded-full">
+                                {sub.order.status.replace(/_/g, " ")}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4">
+                              <span
+                                className={`text-[10px] font-bold uppercase px-2.5 py-1 rounded-full ${
+                                  sub.status === "VERIFIED"
+                                    ? "bg-emerald-100 text-emerald-800"
+                                    : sub.status === "REJECTED"
+                                      ? "bg-rose-100 text-rose-800"
+                                      : "bg-amber-100 text-amber-800"
+                                }`}
+                              >
+                                {sub.status}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4">
+                              {sub.status === "SUBMITTED" ? (
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <button
+                                    onClick={() => handleGiftCardAction(sub.id, "verify")}
+                                    className="text-[10px] font-bold uppercase bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1.5 rounded transition-colors cursor-pointer"
+                                  >
+                                    Verify
+                                  </button>
+                                  <button
+                                    onClick={() => handleGiftCardAction(sub.id, "reject")}
+                                    className="text-[10px] font-bold uppercase bg-rose-600 hover:bg-rose-700 text-white px-2.5 py-1.5 rounded transition-colors cursor-pointer"
+                                  >
+                                    Reject
+                                  </button>
+                                  <button
+                                    onClick={() => handleGiftCardAction(sub.id, "reveal")}
+                                    className="text-[10px] font-bold uppercase bg-gray-800 hover:bg-black text-white px-2.5 py-1.5 rounded transition-colors cursor-pointer"
+                                  >
+                                    Reveal Code
+                                  </button>
+                                </div>
+                              ) : (
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  {sub.reviewNotes && (
+                                    <span className="text-gray-500 italic" title={sub.reviewNotes}>
+                                      {sub.reviewNotes.slice(0, 40)}
+                                    </span>
+                                  )}
+                                  {!revealedCodes[sub.id] && (
+                                    <button
+                                      onClick={() => handleGiftCardAction(sub.id, "reveal")}
+                                      className="text-[10px] font-bold uppercase bg-gray-800 hover:bg-black text-white px-2.5 py-1.5 rounded transition-colors cursor-pointer"
+                                    >
+                                      Reveal Code
+                                    </button>
+                                  )}
+                                </div>
+                              )}
+                            </td>
+                            <td className="px-6 py-4 font-mono text-gray-500">{new Date(sub.createdAt).toLocaleString()}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </main>

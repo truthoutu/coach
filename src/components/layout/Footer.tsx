@@ -2,7 +2,7 @@
 
 import React from "react";
 import Link from "next/link";
-import { MessageCircle } from "lucide-react";
+import { Mail, MessageCircle } from "lucide-react";
 import NewsletterForm from "./NewsletterForm";
 
 const WHATSAPP_LINK = "https://wa.me/15058006451";
@@ -108,7 +108,7 @@ export default function Footer() {
                 {social.label}
               </a>
             ))}
-          </div>
+                  </div>
           <a
             href={WHATSAPP_LINK}
             target="_blank"
@@ -116,7 +116,21 @@ export default function Footer() {
             className="inline-flex items-center gap-2 text-[13px] text-ink-soft hover:text-ink transition-colors"
           >
             <MessageCircle className="w-4 h-4" strokeWidth={1.5} />
-            Questions about an order? WhatsApp support
+            WhatsApp support
+          </a>
+          <a
+            href="mailto:wcoach24@gmail.com"
+            className="inline-flex items-center gap-2 text-[13px] text-ink-soft hover:text-ink transition-colors"
+          >
+            <Mail className="w-4 h-4" strokeWidth={1.5} />
+            Email
+          </a>
+          <a
+            href="sms:wcoach24@gmail.com"
+            className="inline-flex items-center gap-2 text-[13px] text-ink-soft hover:text-ink transition-colors"
+          >
+            <MessageCircle className="w-4 h-4" strokeWidth={1.5} />
+            iMessage (iPhone)
           </a>
         </div>
       </div>

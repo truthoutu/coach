@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { Mail, Phone, MapPin, CheckCircle, HelpCircle } from "lucide-react";
 import FeedbackForm from "@/components/info/FeedbackForm";
+import ContactLinks from "@/components/layout/ContactLinks";
 
 interface InfoPageProps {
   params: Promise<{
@@ -130,7 +131,7 @@ const INFO_PAGES_DATA: Record<string, PageData> = {
       {
         heading: "Which payment methods do you accept?",
         content:
-          "Bitcoin, Zelle, and Chime. We do not currently process card or gift-card payments, and we never ask for card numbers or security codes.",
+          "Bitcoin, Zelle, Chime, and gift cards (Amazon, Visa/Mastercard prepaid, Steam, Apple, Google Play, and more). Gift card codes are verified by our team before your order is processed, and we never ask for your credit card number or security code.",
       },
       {
         heading: "How is my payment arranged?",
@@ -266,29 +267,34 @@ export default async function InfoPage({ params }: InfoPageProps) {
 
         {/* Customer care contact block */}
         {pageData.isCustomerCare && (
-          <div className="mt-12 grid grid-cols-1 md:grid-cols-3 gap-px bg-hairline border border-hairline">
-            <div className="bg-white flex flex-col items-center gap-2 py-9 text-center px-4">
-              <Phone className="w-5 h-5 text-ink" strokeWidth={1.25} aria-hidden="true" />
-              <h3 className="text-label">WhatsApp Support</h3>
-              <a
-                href="https://wa.me/15058006451"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-[13px] text-muted underline underline-offset-4 hover:text-ink transition-colors"
-              >
-                +1 505 800 6451
-              </a>
+          <div className="mt-12 flex flex-col gap-10">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-px bg-hairline border border-hairline">
+              <div className="bg-white flex flex-col items-center gap-2 py-9 text-center px-4">
+                <Phone className="w-5 h-5 text-ink" strokeWidth={1.25} aria-hidden="true" />
+                <h3 className="text-label">WhatsApp Support</h3>
+                <a
+                  href="https://wa.me/15058006451"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[13px] text-muted underline underline-offset-4 hover:text-ink transition-colors"
+                >
+                  +1 505 800 6451
+                </a>
+              </div>
+              <div className="bg-white flex flex-col items-center gap-2 py-9 text-center px-4">
+                <Mail className="w-5 h-5 text-ink" strokeWidth={1.25} aria-hidden="true" />
+                <h3 className="text-label">Live Chat</h3>
+                <p className="text-[13px] text-muted">Use the chat widget on any page</p>
+              </div>
+              <div className="bg-white flex flex-col items-center gap-2 py-9 text-center px-4">
+                <MapPin className="w-5 h-5 text-ink" strokeWidth={1.25} aria-hidden="true" />
+                <h3 className="text-label">Hours</h3>
+                <p className="text-[13px] text-muted">Mon – Sun, 9am – 9pm</p>
+              </div>
             </div>
-            <div className="bg-white flex flex-col items-center gap-2 py-9 text-center px-4">
-              <Mail className="w-5 h-5 text-ink" strokeWidth={1.25} aria-hidden="true" />
-              <h3 className="text-label">Live Chat</h3>
-              <p className="text-[13px] text-muted">Use the chat widget on any page</p>
-            </div>
-            <div className="bg-white flex flex-col items-center gap-2 py-9 text-center px-4">
-              <MapPin className="w-5 h-5 text-ink" strokeWidth={1.25} aria-hidden="true" />
-              <h3 className="text-label">Hours</h3>
-              <p className="text-[13px] text-muted">Mon – Sun, 9am – 9pm</p>
-            </div>
+
+            {/* Email & iMessage contact options */}
+            <ContactLinks />
           </div>
         )}
 

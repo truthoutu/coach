@@ -191,10 +191,25 @@ Three-row header system:
 |----------|--------|-------------|
 | `/api/products` | GET | Fetch products (supports `?search=`, `?category=`, `?limit=`) |
 | `/api/campaigns` | GET | Fetch campaign/editorial content |
-| `/api/orders` | POST | Create new order |
+| `/api/orders` | POST | Create new order (Bitcoin / Zelle / Chime / Cash App / Gift Card; gift card codes are encrypted at rest; seeds the live thread) |
+| `/api/orders` | GET | Fetch orders (gift card codes masked to last 4) |
+| `/api/orders/[number]/live` | GET | Customer live order status + thread (`?email=`; marks admin messages read) — polled by the tracker |
+| `/api/orders/[number]/messages` | GET/POST | Per-order live thread; admin (`{ admin: true }`) or customer (`{ email }`) messages |
+| `/api/orders/[number]/status` | PATCH | Admin: `confirm` (also flips a pending gift card to VERIFIED) / `cancel` / direct status |
+| `/api/orders/[number]/gift-card` | POST | Customer gift card retry after a REJECTED card (replaces submission, posts thread note) |
+| `/api/admin/live` | GET | Admin live counters (pending orders, unread customer messages, pending gift cards) |
+| `/api/gift-cards` | GET | Admin: list gift card submissions (codes masked) |
+| `/api/gift-cards/[id]` | PATCH | Admin actions: `verify` (optionally confirm order), `reject`, `reveal` (returns decrypted code) |
 | `/api/newsletter` | POST | Newsletter subscription |
 | `/api/feedback` | POST | Feedback form submission |
 | `/api/upload` | POST | File upload |
+
+> Gift card payments: the customer submits a third-party gift card code
+> (Amazon, Visa/Mastercard prepaid, Steam, etc.) at checkout. The code is
+> validated, AES-256-GCM encrypted (`GIFT_CARD_ENC_KEY`), and stored with the
+> order; payment is verified manually via WhatsApp and the order stays
+> `PENDING_PAYMENT` until the team confirms it in `/admin → Gift Cards`.
+> Set `GIFT_CARD_ENC_KEY` (64 hex chars) in production.
 
 ---
 
@@ -319,11 +334,22 @@ Three-row header system:
 ### Models
 | Model | Description |
 |-------|-------------|
-| `Product` | id, name, slug, description, price, salePrice, images (JSON), colors (JSON), sizes (JSON), category, tags (JSON), inventory, isNew, isFeatured, isSoldOut, isBestseller, isAlmostGone, createdAt, updatedAt |
-| `Campaign` | id, title, slug, description, image, ctaLabel, ctaHref, isActive, sortOrder, createdAt |
-| `Order` | id, email, firstName, lastName, address, city, zip, country, phone, items (JSON), subtotal, shipping, total, status, createdAt |
-| `Newsletter` | id, email, subscribedAt |
-| `Feedback` | id, email, message, createdAt |
+| `Product` | id, slug, name, description, price, compareAtPrice, currency, category, subcategory, gender, collection, images[], sku, inventory, isNew, isFeatured, status, createdAt, updatedAt |
+| `Campaign` | id, title, subtitle, image, link, isFeatured, displayOrder, createdAt, updatedAt |
+| `Order` | id, number, customerName, email, phone, address, city, postalCode, country, itemsTotal, shippingCost, taxTotal, total, currency, status, paymentMethod, notes, createdAt, updatedAt |
+| `OrderItem` | id, orderId, productId, name, sku, price, currency, quantity, image |
+| `OrderMessage` | id, orderId, senderRole (`CUSTOMER`/`ADMIN`), body, readByAdmin, readByCustomer, createdAt — the live thread |
+| `GiftCardSubmission` | id, orderId (unique), brand, codeEncrypted (AES-256-GCM), codeLast4, pinEncrypted, claimedValue, status, reviewNotes, createdAt, updatedAt |
+| `NewsletterSubscription` | id, email, consent, source, createdAt |
+| `Feedback` | id, name, email, message, createdAt |
+
+### Enums
+| Enum | Values |
+|------|--------|
+| `OrderStatus` | `PENDING_PAYMENT`, `CONFIRMED`, `PROCESSING`, `SHIPPED`, `DELIVERED`, `CANCELLED` |
+| `PaymentMethod` | `BITCOIN`, `ZELLE`, `CHIME`, `CASHAPP`, `GIFT_CARD` |
+| `GiftCardStatus` | `SUBMITTED`, `VERIFIED`, `REJECTED` |
+| `SenderRole` | `CUSTOMER`, `ADMIN` |
 
 
 ### ProductDetailClient.tsx
