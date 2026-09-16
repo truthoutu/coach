@@ -13,6 +13,7 @@ CREATE TABLE "OrderMessage" (
     "readByAdmin" BOOLEAN NOT NULL DEFAULT false,
     "readByCustomer" BOOLEAN NOT NULL DEFAULT false,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "OrderMessage_pkey" PRIMARY KEY ("id")
 );
