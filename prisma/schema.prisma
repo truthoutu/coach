@@ -83,7 +83,7 @@ model Order {
   customerPaidAt     DateTime?
   giftCardSubmission GiftCardSubmission[]
   items              OrderItem[]
-  orderMessages     OrderMessage[]
+  orderMessages     OrderMessage[] @relation("OrderOrderMessages")
 }
 
 model GiftCardSubmission {
@@ -156,7 +156,7 @@ model OrderMessage {
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
 
-  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  order Order @relation("OrderOrderMessages", fields: [orderId], references: [id], onDelete: Cascade)
 
   @@index([orderId])
   @@index([createdAt])
