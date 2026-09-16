@@ -139,3 +139,24 @@ enum GiftCardStatus {
   VERIFIED
   REJECTED
 }
+
+enum SenderRole {
+  CUSTOMER
+  ADMIN
+}
+
+model OrderMessage {
+  id             String       @id @default(cuid())
+  orderId        String
+  senderRole     SenderRole   @default(CUSTOMER)
+  body           String
+  readByAdmin    Boolean      @default(false)
+  readByCustomer Boolean      @default(false)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@index([createdAt])
+}
