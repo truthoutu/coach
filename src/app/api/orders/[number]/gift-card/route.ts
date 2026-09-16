@@ -83,6 +83,9 @@ export async function POST(request: Request, { params }: RouteParams) {
     return NextResponse.json({ submission }, { status: 201 });
   } catch (error) {
     console.error("Error resubmitting gift card:", error);
-    return NextResponse.json({ error: "Failed to submit gift card" }, { status: 500 });
+    if (process.env.NODE_ENV !== "production") {
+      return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to submit gift card" }, { status: 500 });
+    }
+    return NextResponse.json({ error: "Failed to submit gift card. Please try again." }, { status: 500 });
   }
 }

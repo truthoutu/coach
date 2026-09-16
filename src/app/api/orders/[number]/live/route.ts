@@ -77,6 +77,9 @@ export async function GET(request: Request, { params }: RouteParams) {
     });
   } catch (error) {
     console.error("Error fetching live order:", error);
-    return NextResponse.json({ error: "Failed to fetch order status" }, { status: 500 });
+    if (process.env.NODE_ENV !== "production") {
+      return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to fetch order status" }, { status: 500 });
+    }
+    return NextResponse.json({ error: "Failed to fetch order status. Please try again." }, { status: 500 });
   }
 }

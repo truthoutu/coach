@@ -81,6 +81,9 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     );
   } catch (error) {
     console.error("Error updating gift card submission:", error);
-    return NextResponse.json({ error: "Failed to update gift card submission" }, { status: 500 });
+    if (process.env.NODE_ENV !== "production") {
+      return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to update gift card submission" }, { status: 500 });
+    }
+    return NextResponse.json({ error: "Failed to update gift card submission. Please try again." }, { status: 500 });
   }
 }

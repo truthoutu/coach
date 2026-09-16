@@ -40,7 +40,10 @@ export async function GET(request: Request, { params }: RouteParams) {
     });
   } catch (error) {
     console.error("Error fetching order messages:", error);
-    return NextResponse.json({ error: "Failed to fetch messages" }, { status: 500 });
+    if (process.env.NODE_ENV !== "production") {
+      return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to fetch messages" }, { status: 500 });
+    }
+    return NextResponse.json({ error: "Failed to fetch messages. Please try again." }, { status: 500 });
   }
 }
 
@@ -86,6 +89,9 @@ export async function POST(request: Request, { params }: RouteParams) {
     return NextResponse.json({ message: created }, { status: 201 });
   } catch (error) {
     console.error("Error creating order message:", error);
-    return NextResponse.json({ error: "Failed to send message" }, { status: 500 });
+    if (process.env.NODE_ENV !== "production") {
+      return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to send message" }, { status: 500 });
+    }
+    return NextResponse.json({ error: "Failed to send message. Please try again." }, { status: 500 });
   }
 }

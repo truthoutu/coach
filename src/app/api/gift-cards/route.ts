@@ -40,6 +40,9 @@ export async function GET() {
     return NextResponse.json({ submissions });
   } catch (error) {
     console.error("Error fetching gift card submissions:", error);
-    return NextResponse.json({ error: "Failed to fetch gift card submissions" }, { status: 500 });
+    if (process.env.NODE_ENV !== "production") {
+      return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to fetch gift card submissions" }, { status: 500 });
+    }
+    return NextResponse.json({ error: "Failed to fetch gift card submissions. Please try again." }, { status: 500 });
   }
 }

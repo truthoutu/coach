@@ -36,10 +36,13 @@ export async function GET() {
         },
       },
     });
-    return NextResponse.json({ orders });
+        return NextResponse.json({ orders });
   } catch (error) {
     console.error("Error fetching orders:", error);
-    return NextResponse.json({ error: "Failed to fetch orders" }, { status: 500 });
+    if (process.env.NODE_ENV !== "production") {
+      return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to fetch orders" }, { status: 500 });
+    }
+    return NextResponse.json({ error: "Failed to fetch orders. Please try again." }, { status: 500 });
   }
 }
 
@@ -266,12 +269,22 @@ export async function POST(request: Request) {
       },
       { status: 201 }
     );
-  } catch (error) {
+    } catch (error) {
     console.error("Error creating order:", error);
-    const message =
-      error instanceof Error && /GIFT_CARD_ENC_KEY|Database is not configured/i.test(error.message)
-        ? `Checkout is temporarily unavailable (${error.message}). Please contact support via WhatsApp.`
-        : "Failed to create order";
-    return NextResponse.json({ error: message }, { status: 500 });
+    if (
+      error instanceof Error &&
+      /GIFT_CARD_ENC_KEY|Database is not configured/i.test(error.message)
+    ) {
+      return NextResponse.json(
+        { error: `Checkout is temporarily unavailable (${error.message}). Please contact support via WhatsApp.` },
+        { status: 503 }
+      );
+    }
+    // Surface the actual error so it can be diagnosed instead of being masked
+    // as a generic "Failed to create order" 500 response.
+    if (process.env.NODE_ENV !== "production") {
+      return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to create order" }, { status: 500 });
+    }
+    return NextResponse.json({ error: "Failed to create order. Please try again or contact support via WhatsApp." }, { status: 500 });
   }
 }

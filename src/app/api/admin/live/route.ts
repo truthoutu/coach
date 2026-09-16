@@ -25,6 +25,9 @@ export async function GET() {
     });
   } catch (error) {
     console.error("Error fetching admin live stats:", error);
-    return NextResponse.json({ error: "Failed to fetch live stats" }, { status: 500 });
+    if (process.env.NODE_ENV !== "production") {
+      return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to fetch live stats" }, { status: 500 });
+    }
+    return NextResponse.json({ error: "Failed to fetch live stats. Please try again." }, { status: 500 });
   }
 }
