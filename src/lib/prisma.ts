@@ -30,6 +30,8 @@ function createClient(): PrismaClient | null {
  * Importing this module never throws, even without DATABASE_URL - route
  * handlers check `hasDatabase()` first and return a friendly 503 instead.
  */
+// Suppress Prisma's own connection error logs during serverless cold starts
+// (they are noisy and the route handlers now surface the real error to clients).
 export const prisma: PrismaClient = ((): PrismaClient => {
   const existing = globalForPrisma.prisma;
   if (existing) return existing;

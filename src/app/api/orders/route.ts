@@ -35,14 +35,11 @@ export async function GET() {
           },
         },
       },
-    });
-        return NextResponse.json({ orders });
+        });
+    return NextResponse.json({ orders });
   } catch (error) {
     console.error("Error fetching orders:", error);
-    if (process.env.NODE_ENV !== "production") {
-      return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to fetch orders" }, { status: 500 });
-    }
-    return NextResponse.json({ error: "Failed to fetch orders. Please try again." }, { status: 500 });
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to fetch orders" }, { status: 500 });
   }
 }
 
@@ -269,7 +266,7 @@ export async function POST(request: Request) {
       },
       { status: 201 }
     );
-    } catch (error) {
+      } catch (error) {
     console.error("Error creating order:", error);
     if (
       error instanceof Error &&
@@ -282,9 +279,6 @@ export async function POST(request: Request) {
     }
     // Surface the actual error so it can be diagnosed instead of being masked
     // as a generic "Failed to create order" 500 response.
-    if (process.env.NODE_ENV !== "production") {
-      return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to create order" }, { status: 500 });
-    }
-    return NextResponse.json({ error: "Failed to create order. Please try again or contact support via WhatsApp." }, { status: 500 });
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to create order" }, { status: 500 });
   }
 }
