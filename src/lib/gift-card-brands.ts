@@ -16,6 +16,7 @@ export interface GiftCardBrand {
 }
 
 export const GIFT_CARD_BRANDS: GiftCardBrand[] = [
+  { id: "COACH", label: "Coach", minCodeLength: 8, maxCodeLength: 25 },
   { id: "AMAZON", label: "Amazon", minCodeLength: 8, maxCodeLength: 20 },
   { id: "VISA", label: "Visa Prepaid", minCodeLength: 12, maxCodeLength: 25 },
   { id: "MASTERCARD", label: "Mastercard Prepaid", minCodeLength: 12, maxCodeLength: 25 },
