@@ -44,6 +44,12 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  if (!hasDatabase()) {
+    return NextResponse.json(
+      { error: "Checkout is temporarily unavailable (database not configured). Please try again or contact support via WhatsApp." },
+      { status: 503 }
+    );
+  }
   try {
     const body = await request.json();
     const {
@@ -262,6 +268,10 @@ export async function POST(request: Request) {
     );
   } catch (error) {
     console.error("Error creating order:", error);
-    return NextResponse.json({ error: "Failed to create order" }, { status: 500 });
+    const message =
+      error instanceof Error && /GIFT_CARD_ENC_KEY|Database is not configured/i.test(error.message)
+        ? `Checkout is temporarily unavailable (${error.message}). Please contact support via WhatsApp.`
+        : "Failed to create order";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
