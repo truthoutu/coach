@@ -68,7 +68,21 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
 
     const isAdmin = body?.admin === true;
-    // No email verification - just check if it's admin or customer
+    // Payment-details send: admin types instructions → land ONLY on
+    // Order.paymentNote. Do NOT create a chat bubble — the customer main
+    // card shows the details; the live thread stays for real conversation.
+    const asPaymentDetails = isAdmin && body?.asPaymentDetails === true;
+
+    if (asPaymentDetails) {
+      await prisma.order.update({
+        where: { id: order.id },
+        data: { paymentNote: text },
+      });
+      return NextResponse.json(
+        { paymentDetails: text, orderNumber: order.number },
+        { status: 201 }
+      );
+    }
 
     const created = await prisma.orderMessage.create({
       data: {
@@ -80,16 +94,6 @@ export async function POST(request: Request, { params }: RouteParams) {
       },
       select: { id: true, senderRole: true, body: true, createdAt: true },
     });
-
-    // Admin payment-detail messages also land on Order.paymentNote so the
-    // customer tracker can promote them into the main "details ready" card
-    // instead of leaving the spinner forever.
-    if (isAdmin && !order.paymentNote) {
-      await prisma.order.update({
-        where: { id: order.id },
-        data: { paymentNote: text },
-      });
-    }
 
     // The customer's "I have paid" tap is persisted on the order (not just in
     // component state) so the tracker survives a page refresh and the admin

@@ -455,7 +455,8 @@ export default function AdminPage() {
       const res = await fetch(`/api/orders/${encodeURIComponent(orderNumber)}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ admin: true, body: message }),
+        // asPaymentDetails: true → writes Order.paymentNote only, no chat bubble
+        body: JSON.stringify({ admin: true, body: message, asPaymentDetails: true }),
       });
       if (res.ok) {
         setToast({ text: `Payment details sent to customer for ${paymentMethod}`, type: "success" });

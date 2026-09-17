@@ -170,12 +170,22 @@ export default function OrderTracker({
   const giftRejected = giftCard?.status === "REJECTED";
   const messages = live?.messages ?? [];
 
-  // Payment details can come from Order.paymentNote OR the latest admin message
-  // (admin currently sends details as a chat message; we also persist paymentNote).
-  const paymentDetailsFromNote = (live?.order?.paymentDetails || "").trim();
-  const latestAdminMsg = [...messages].reverse().find((m) => m.senderRole === "ADMIN");
-  const paymentDetailsText = paymentDetailsFromNote || (latestAdminMsg?.body?.trim() ?? "");
-  const hasPaymentDetails = paymentMethod !== "bitcoin" && paymentMethod !== "gift_card" && !!paymentDetailsText;
+  // Payment details come ONLY from Order.paymentNote (admin typed them via the
+  // dedicated "Send payment details" flow). They are NOT chat messages — the
+  // live thread stays for real conversation via the message bar.
+  const paymentDetailsText = (live?.order?.paymentDetails || "").trim();
+  const hasPaymentDetails =
+    paymentMethod !== "bitcoin" &&
+    paymentMethod !== "gift_card" &&
+    !!paymentDetailsText;
+
+  // Thread = real conversation only. Hide any legacy payment-detail bubbles
+  // that were posted as chat before this fix (body matches paymentNote).
+  const threadMessages = paymentDetailsText
+    ? messages.filter(
+        (m) => !(m.senderRole === "ADMIN" && m.body.trim() === paymentDetailsText)
+      )
+    : messages;
 
   // Persist paid state across refresh once the server has customerPaidAt
   const serverPaid = !!live?.order?.customerPaidAt;
@@ -270,7 +280,7 @@ export default function OrderTracker({
   // Auto-scroll the thread
   useEffect(() => {
     if (threadRef.current) threadRef.current.scrollTop = threadRef.current.scrollHeight;
-  }, [live?.messages?.length]);
+  }, [threadMessages.length]);
 
   return (
     <div className="min-h-screen bg-paper text-ink">
@@ -568,12 +578,12 @@ export default function OrderTracker({
             </span>
           </div>
           <div ref={threadRef} className="px-5 py-4 space-y-3 max-h-72 overflow-y-auto">
-            {messages.length === 0 ? (
+            {threadMessages.length === 0 ? (
               <p className="text-[13px] text-muted py-2">
                 No messages yet — our team has been notified and will reply here shortly.
               </p>
             ) : (
-              messages.map((m) => (
+              threadMessages.map((m) => (
                 <div
                   key={m.id}
                   className={`max-w-[85%] rounded-lg px-3.5 py-2.5 text-[13px] leading-relaxed ${
