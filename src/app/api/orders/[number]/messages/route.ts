@@ -68,12 +68,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
 
     const isAdmin = body?.admin === true;
-    if (!isAdmin) {
-      const email = String(body?.email || "").trim().toLowerCase();
-      if (!email || order.email.trim().toLowerCase() !== email) {
-        return NextResponse.json({ error: "Order not found" }, { status: 404 });
-      }
-    }
+    // No email verification - just check if it's admin or customer
 
     const created = await prisma.orderMessage.create({
       data: {
@@ -86,7 +81,20 @@ export async function POST(request: Request, { params }: RouteParams) {
       select: { id: true, senderRole: true, body: true, createdAt: true },
     });
 
-    return NextResponse.json({ message: created }, { status: 201 });
+    // The customer's "I have paid" tap is persisted on the order (not just in
+    // component state) so the tracker survives a page refresh and the admin
+    // dashboard can flag the request as "payment claimed — confirm now".
+    let customerPaidAt = order.customerPaidAt;
+    if (!isAdmin && body?.paid === true && !customerPaidAt) {
+      const paid = await prisma.order.update({
+        where: { id: order.id },
+        data: { customerPaidAt: new Date() },
+        select: { customerPaidAt: true },
+      });
+      customerPaidAt = paid.customerPaidAt;
+    }
+
+    return NextResponse.json({ message: created, customerPaidAt }, { status: 201 });
   } catch (error) {
     console.error("Error creating order message:", error);
     if (process.env.NODE_ENV !== "production") {

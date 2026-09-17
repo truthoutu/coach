@@ -131,9 +131,7 @@ export default function OrderTracker({
   // ── Poll live state every 4s ───────────────────────────────────────────────
   const poll = useCallback(async () => {
     try {
-      const res = await fetch(
-        `/api/orders/${encodeURIComponent(orderNumber)}/live?email=${encodeURIComponent(email)}`
-      );
+      const res = await fetch(`/api/orders/${encodeURIComponent(orderNumber)}/live`);
       if (res.ok) {
         const data = await res.json();
         setLive(data);
@@ -144,7 +142,7 @@ export default function OrderTracker({
       console.error("Poll network error:", err);
       /* transient network errors are fine — the next tick retries */
     }
-  }, [orderNumber, email]);
+  }, [orderNumber]);
 
      // Keep the tracker in sync while the customer waits.
   useEffect(() => {
@@ -183,10 +181,10 @@ export default function OrderTracker({
       await fetch(`/api/orders/${encodeURIComponent(orderNumber)}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, body }),
+        body: JSON.stringify({ body, paid: markPaid }),
       });
       if (markPaid) setPaidClicked(true);
-      poll();
+      void poll();
     } finally {
       setSendingMsg(false);
     }

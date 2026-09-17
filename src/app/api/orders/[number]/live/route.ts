@@ -7,7 +7,7 @@ type RouteParams = { params: Promise<{ number: string }> };
 
 /**
  * Customer-side live order status, polled every few seconds by the tracker.
- * Light verification: the caller must pass the email used at checkout.
+ * Uses order number only - no email verification required.
  * Reading the thread marks admin messages as seen by the customer.
  */
 export async function GET(request: Request, { params }: RouteParams) {
@@ -16,8 +16,6 @@ export async function GET(request: Request, { params }: RouteParams) {
   }
   try {
     const { number } = await params;
-    const { searchParams } = new URL(request.url);
-    const email = String(searchParams.get("email") || "").trim().toLowerCase();
 
     const order = await prisma.order.findUnique({
       where: { number },
@@ -25,17 +23,6 @@ export async function GET(request: Request, { params }: RouteParams) {
 
     if (!order) {
       console.error("Order not found:", number);
-      return NextResponse.json({ error: "Order not found" }, { status: 404 });
-    }
-
-    if (!email) {
-      console.error("No email provided for order:", number);
-      return NextResponse.json({ error: "Email required" }, { status: 400 });
-    }
-
-    const orderEmail = order.email.trim().toLowerCase();
-    if (orderEmail !== email) {
-      console.error("Email mismatch for order:", number, "provided:", email, "stored:", orderEmail);
       return NextResponse.json({ error: "Order not found" }, { status: 404 });
     }
 
