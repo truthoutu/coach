@@ -192,6 +192,8 @@ export default function AdminPage() {
   // Pending orders popup modal
   const [showPendingModal, setShowPendingModal] = useState(false);
   const [pendingOrdersDismissed, setPendingOrdersDismissed] = useState<Set<string>>(new Set());
+  const [paymentDetailInputs, setPaymentDetailInputs] = useState<Record<string, string>>({});
+  const [sendingPaymentDetails, setSendingPaymentDetails] = useState<Record<string, boolean>>({});
 
   // Upload & Toast state
   const [uploading, setUploading] = useState(false);
@@ -435,6 +437,39 @@ export default function AdminPage() {
       setToast({ text: "Could not send. Please try again.", type: "error" });
     } finally {
       setSendingReply((prev) => ({ ...prev, [orderNumber]: false }));
+    }
+  }
+
+  async function sendPaymentDetailsDirect(orderNumber: string, paymentMethod: string, customDetails: string) {
+    setSendingPaymentDetails((prev) => ({ ...prev, [orderNumber]: true }));
+    try {
+      // Get the appropriate payment message based on method
+      let message = "";
+      if (customDetails.trim()) {
+        message = customDetails.trim();
+      } else {
+        const tag = PAYMENT_TAGS.find((t) => t.label.toLowerCase().includes(paymentMethod.toLowerCase()));
+        message = tag ? tag.body : `Payment details for ${paymentMethod}`;
+      }
+
+      const res = await fetch(`/api/orders/${encodeURIComponent(orderNumber)}/messages`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ admin: true, body: message }),
+      });
+      if (res.ok) {
+        setToast({ text: `Payment details sent to customer for ${paymentMethod}`, type: "success" });
+        setPendingOrdersDismissed((prev) => new Set([...prev, orderNumber]));
+        // Refresh orders to update status
+        fetchOrders();
+      } else {
+        setToast({ text: "Could not send payment details. Please try again.", type: "error" });
+      }
+    } catch (err) {
+      console.error(err);
+      setToast({ text: "Could not send payment details. Please try again.", type: "error" });
+    } finally {
+      setSendingPaymentDetails((prev) => ({ ...prev, [orderNumber]: false }));
     }
   }
 
@@ -880,12 +915,12 @@ export default function AdminPage() {
           {/* PENDING ORDERS POPUP MODAL */}
           {showPendingModal && (
             <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
-              <div className="bg-white rounded-2xl max-w-2xl w-full p-6 sm:p-8 shadow-2xl max-h-[85vh] overflow-y-auto">
+              <div className="bg-white rounded-2xl max-w-3xl w-full p-6 sm:p-8 shadow-2xl max-h-[90vh] overflow-y-auto">
                 <div className="flex items-center justify-between mb-6">
                   <div>
-                    <h2 className="font-serif text-2xl font-bold text-gray-900">🔔 New Orders Need Payment Details</h2>
+                    <h2 className="font-serif text-2xl font-bold text-gray-900">🔔 Send Payment Details Now</h2>
                     <p className="text-sm text-gray-600 mt-1">
-                      Customers have placed orders and are waiting for you to send payment details.
+                      Customers are waiting for payment details. Send them immediately below.
                     </p>
                   </div>
                   <button
@@ -896,55 +931,82 @@ export default function AdminPage() {
                   </button>
                 </div>
 
-                <div className="space-y-4">
+                <div className="space-y-6">
                   {orders
                     .filter((o) => o.status === "PENDING_PAYMENT" && !pendingOrdersDismissed.has(o.id))
                     .map((ord) => (
                       <div
                         key={ord.id}
-                        className="border border-gray-200 rounded-xl p-4 bg-amber-50/40 hover:bg-amber-50/60 transition-colors"
+                        className="border-2 border-amber-300 rounded-xl p-5 bg-amber-50/50"
                       >
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-3 mb-2">
-                              <span className="font-mono font-bold text-lg">{ord.number}</span>
-                              <span className="text-sm font-medium text-gray-700">{ord.customerName}</span>
-                            </div>
-                            <div className="flex flex-wrap gap-2 text-xs mb-3">
-                              <span className="bg-slate-900 text-white px-2.5 py-1 rounded-full font-bold uppercase">
-                                {ord.paymentMethod}
-                              </span>
-                              <span className="bg-gray-200 text-gray-700 px-2.5 py-1 rounded-full font-mono font-bold">
-                                ${toNumber(ord.total).toFixed(2)}
-                              </span>
-                              <span className="text-gray-500">
-                                {ord.items.length} item{ord.items.length === 1 ? "" : "s"}
-                              </span>
-                            </div>
-                            <p className="text-xs text-gray-600 mb-3">
-                              {ord.items.map((it) => `${it.name} ×${it.quantity}`).join(", ")}
-                            </p>
+                        <div className="flex items-center gap-3 mb-4">
+                          <span className="font-mono font-bold text-xl">{ord.number}</span>
+                          <span className="text-sm font-medium text-gray-700">{ord.customerName}</span>
+                          <span className="ml-auto bg-slate-900 text-white px-3 py-1.5 rounded-full font-bold uppercase text-xs">
+                            {ord.paymentMethod}
+                          </span>
+                        </div>
+                        
+                        <div className="flex flex-wrap gap-2 text-xs mb-4">
+                          <span className="bg-gray-200 text-gray-700 px-2.5 py-1 rounded-full font-mono font-bold">
+                            ${toNumber(ord.total).toFixed(2)}
+                          </span>
+                          <span className="text-gray-500">
+                            {ord.items.length} item{ord.items.length === 1 ? "" : "s"}
+                          </span>
+                        </div>
+
+                        <p className="text-xs text-gray-600 mb-4">
+                          {ord.items.map((it) => `${it.name} ×${it.quantity}`).join(", ")}
+                        </p>
+
+                        {/* Quick send buttons based on payment method */}
+                        <div className="space-y-3">
+                          <p className="text-xs font-bold uppercase tracking-wider text-gray-500">
+                            Send payment details for {ord.paymentMethod}:
+                          </p>
+                          
+                          <div className="flex flex-wrap gap-2">
+                            {PAYMENT_TAGS.map((tag) => (
+                              <button
+                                key={tag.label}
+                                onClick={() => sendPaymentDetailsDirect(ord.number, ord.paymentMethod, tag.body)}
+                                disabled={sendingPaymentDetails[ord.number]}
+                                className="text-xs font-bold bg-slate-900 hover:bg-black text-white px-4 py-2.5 rounded-lg transition-colors disabled:opacity-50 cursor-pointer"
+                              >
+                                {sendingPaymentDetails[ord.number] ? "Sending..." : tag.label}
+                              </button>
+                            ))}
                           </div>
-                          <div className="flex flex-col gap-2">
+
+                          {/* Custom message input */}
+                          <div className="mt-3">
+                            <textarea
+                              placeholder="Or type custom payment details..."
+                              value={paymentDetailInputs[ord.id] || ""}
+                              onChange={(e) => setPaymentDetailInputs((prev) => ({ ...prev, [ord.id]: e.target.value }))}
+                              rows={2}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none focus:ring-1 focus:ring-black resize-none"
+                            />
                             <button
-                              onClick={() => {
-                                setActiveNav("orders");
-                                setShowPendingModal(false);
-                                setTimeout(() => setExpandedOrder(ord.number), 100);
-                              }}
-                              className="bg-black hover:bg-gray-800 text-white px-4 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-colors cursor-pointer"
+                              onClick={() => sendPaymentDetailsDirect(ord.number, ord.paymentMethod, paymentDetailInputs[ord.id] || "")}
+                              disabled={sendingPaymentDetails[ord.number] || !paymentDetailInputs[ord.id]?.trim()}
+                              className="mt-2 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg transition-colors disabled:opacity-50 cursor-pointer"
                             >
-                              Send Payment Details
-                            </button>
-                            <button
-                              onClick={() => {
-                                setPendingOrdersDismissed((prev) => new Set([...prev, ord.id]));
-                              }}
-                              className="text-xs text-gray-500 hover:text-gray-700 font-semibold cursor-pointer"
-                            >
-                              Dismiss
+                              {sendingPaymentDetails[ord.number] ? "Sending..." : "Send Custom Details"}
                             </button>
                           </div>
+                        </div>
+
+                        <div className="mt-4 pt-4 border-t border-amber-200 flex justify-end">
+                          <button
+                            onClick={() => {
+                              setPendingOrdersDismissed((prev) => new Set([...prev, ord.id]));
+                            }}
+                            className="text-xs text-gray-500 hover:text-gray-700 font-semibold cursor-pointer"
+                          >
+                            Dismiss this order
+                          </button>
                         </div>
                       </div>
                     ))}
