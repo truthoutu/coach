@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
+import { toNumber } from "@/lib/money";
 import {
   LayoutDashboard,
   ShoppingBag,
@@ -188,6 +189,10 @@ export default function AdminPage() {
   const [actingOrder, setActingOrder] = useState<Record<string, boolean>>({});
   const threadEndRef = useRef<HTMLDivElement>(null);
 
+  // Pending orders popup modal
+  const [showPendingModal, setShowPendingModal] = useState(false);
+  const [pendingOrdersDismissed, setPendingOrdersDismissed] = useState<Set<string>>(new Set());
+
   // Upload & Toast state
   const [uploading, setUploading] = useState(false);
   const [toast, setToast] = useState<{ text: string; type: "success" | "error" } | null>(null);
@@ -373,6 +378,18 @@ export default function AdminPage() {
       clearInterval(id);
     };
   }, [liveOn, soundOn]);
+
+  // ── Show pending orders popup when there are new pending orders ─────────
+  useEffect(() => {
+    if (liveStats.pendingOrders > 0) {
+      const pendingOrdersNeedingAction = orders.filter(
+        (o) => o.status === "PENDING_PAYMENT" && !pendingOrdersDismissed.has(o.id)
+      );
+      if (pendingOrdersNeedingAction.length > 0) {
+        setShowPendingModal(true);
+      }
+    }
+  }, [liveStats.pendingOrders, orders, pendingOrdersDismissed]);
 
   // ── Per-order live thread (chat + actions) ─────────────────────────────────
   async function loadThread(orderNumber: string) {
@@ -624,7 +641,10 @@ export default function AdminPage() {
     return matchesSearch && matchesCategory;
   });
 
-  const totalSales = orders.reduce((sum, o) => sum + o.total, 0);
+  // Money fields arrive from /api/orders already coerced to numbers, but
+  // `toNumber` keeps the sum safe even if a legacy string slips through
+  // (a string here would turn `sum` into concatenation and crash `.toFixed()`).
+  const totalSales = orders.reduce((sum, o) => sum + toNumber(o.total), 0);
 
   return (
     <div className="min-h-screen bg-gray-100 text-gray-900 font-sans flex">
@@ -857,6 +877,97 @@ export default function AdminPage() {
             </div>
           )}
 
+          {/* PENDING ORDERS POPUP MODAL */}
+          {showPendingModal && (
+            <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+              <div className="bg-white rounded-2xl max-w-2xl w-full p-6 sm:p-8 shadow-2xl max-h-[85vh] overflow-y-auto">
+                <div className="flex items-center justify-between mb-6">
+                  <div>
+                    <h2 className="font-serif text-2xl font-bold text-gray-900">🔔 New Orders Need Payment Details</h2>
+                    <p className="text-sm text-gray-600 mt-1">
+                      Customers have placed orders and are waiting for you to send payment details.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setShowPendingModal(false)}
+                    className="text-gray-400 hover:text-black cursor-pointer p-1"
+                  >
+                    <X size={24} />
+                  </button>
+                </div>
+
+                <div className="space-y-4">
+                  {orders
+                    .filter((o) => o.status === "PENDING_PAYMENT" && !pendingOrdersDismissed.has(o.id))
+                    .map((ord) => (
+                      <div
+                        key={ord.id}
+                        className="border border-gray-200 rounded-xl p-4 bg-amber-50/40 hover:bg-amber-50/60 transition-colors"
+                      >
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-3 mb-2">
+                              <span className="font-mono font-bold text-lg">{ord.number}</span>
+                              <span className="text-sm font-medium text-gray-700">{ord.customerName}</span>
+                            </div>
+                            <div className="flex flex-wrap gap-2 text-xs mb-3">
+                              <span className="bg-slate-900 text-white px-2.5 py-1 rounded-full font-bold uppercase">
+                                {ord.paymentMethod}
+                              </span>
+                              <span className="bg-gray-200 text-gray-700 px-2.5 py-1 rounded-full font-mono font-bold">
+                                ${toNumber(ord.total).toFixed(2)}
+                              </span>
+                              <span className="text-gray-500">
+                                {ord.items.length} item{ord.items.length === 1 ? "" : "s"}
+                              </span>
+                            </div>
+                            <p className="text-xs text-gray-600 mb-3">
+                              {ord.items.map((it) => `${it.name} ×${it.quantity}`).join(", ")}
+                            </p>
+                          </div>
+                          <div className="flex flex-col gap-2">
+                            <button
+                              onClick={() => {
+                                setActiveNav("orders");
+                                setShowPendingModal(false);
+                                setTimeout(() => setExpandedOrder(ord.number), 100);
+                              }}
+                              className="bg-black hover:bg-gray-800 text-white px-4 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-colors cursor-pointer"
+                            >
+                              Send Payment Details
+                            </button>
+                            <button
+                              onClick={() => {
+                                setPendingOrdersDismissed((prev) => new Set([...prev, ord.id]));
+                              }}
+                              className="text-xs text-gray-500 hover:text-gray-700 font-semibold cursor-pointer"
+                            >
+                              Dismiss
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+
+                {orders.filter((o) => o.status === "PENDING_PAYMENT" && !pendingOrdersDismissed.has(o.id)).length === 0 && (
+                  <div className="text-center py-8 text-gray-500">
+                    <p className="text-sm">No pending orders needing payment details.</p>
+                  </div>
+                )}
+
+                <div className="mt-6 pt-4 border-t border-gray-200 flex justify-end">
+                  <button
+                    onClick={() => setShowPendingModal(false)}
+                    className="text-xs font-bold uppercase tracking-wider text-gray-600 hover:text-black cursor-pointer"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* VIEW 1: OVERVIEW */}
           {activeNav === "overview" && (
             <div className="space-y-8">
@@ -926,7 +1037,7 @@ export default function AdminPage() {
                             <td className="px-6 py-4 font-mono font-bold">{ord.number}</td>
                             <td className="px-6 py-4 font-medium">{ord.customerName}</td>
                             <td className="px-6 py-4 text-gray-700">{ord.items.length} item{ord.items.length === 1 ? "" : "s"}</td>
-                            <td className="px-6 py-4 font-mono font-semibold">${ord.total.toFixed(2)}</td>
+                            <td className="px-6 py-4 font-mono font-semibold">${toNumber(ord.total).toFixed(2)}</td>
                             <td className="px-6 py-4 font-mono text-gray-600">{ord.paymentMethod}</td>
                             <td className="px-6 py-4">
                               <span className="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-amber-100 text-amber-800">
@@ -1238,7 +1349,7 @@ export default function AdminPage() {
                             {ord.items.map((it) => `${it.name} ×${it.quantity}`).join(", ")}
                           </span>
                           <span className="text-[11px] font-mono font-bold ml-auto whitespace-nowrap">
-                            ${ord.total.toFixed(2)}
+                            ${toNumber(ord.total).toFixed(2)}
                           </span>
                           <span className="hidden md:inline text-[10px] font-mono text-gray-500">{ord.paymentMethod}</span>
                           <span
@@ -1448,7 +1559,7 @@ export default function AdminPage() {
                               )}
                             </td>
                             <td className="px-6 py-4 font-mono">
-                              {sub.claimedValue ? `$${Number(sub.claimedValue).toFixed(2)}` : "—"}
+                              {sub.claimedValue ? `$${toNumber(sub.claimedValue).toFixed(2)}` : "—"}
                             </td>
                             <td className="px-6 py-4">
                               <span className="bg-amber-100 text-amber-800 text-[10px] font-bold uppercase px-2.5 py-1 rounded-full">

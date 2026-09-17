@@ -73,7 +73,6 @@ export const LOCALES = [
   { code: "FR", label: "France (EUR €)", flag: "🇫🇷" },
   { code: "DE", label: "Germany (EUR €)", flag: "🇩🇪" },
   { code: "AE", label: "UAE (AED د.إ)", flag: "🇦🇪" },
-  { code: "NG", label: "Nigeria (NGN ₦)", flag: "🇳🇬" },
 ];
 
 export const WISHLIST_EVENT = "coach1:wishlist-updated";
