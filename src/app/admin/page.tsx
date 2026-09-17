@@ -66,6 +66,8 @@ interface Order {
   status: string;
   paymentMethod: string;
   createdAt: string;
+  customerPaidAt?: string | null;
+  paymentNote?: string | null;
   items: OrderItem[];
 }
 
@@ -385,7 +387,7 @@ export default function AdminPage() {
   useEffect(() => {
     if (liveStats.pendingOrders > 0) {
       const pendingOrdersNeedingAction = orders.filter(
-        (o) => o.status === "PENDING_PAYMENT" && !pendingOrdersDismissed.has(o.id)
+        (o) => o.status === "PENDING_PAYMENT" && !pendingOrdersDismissed.has(o.number)
       );
       if (pendingOrdersNeedingAction.length > 0) {
         setShowPendingModal(true);
@@ -428,7 +430,7 @@ export default function AdminPage() {
       });
       if (res.ok) {
         loadThread(orderNumber);
-        setToast({ text: "Payment details sent to the customer.", type: "success" });
+        setToast({ text: "Message sent.", type: "success" });
       } else {
         setToast({ text: "Could not send. Please try again.", type: "error" });
       }
@@ -459,7 +461,20 @@ export default function AdminPage() {
       if (res.ok) {
         setToast({ text: `Payment details sent to customer for ${paymentMethod}`, type: "success" });
         setPendingOrdersDismissed((prev) => new Set([...prev, orderNumber]));
-        // Refresh orders to update status
+        // Clear any draft text for this order (keyed by id or number)
+        setPaymentDetailInputs((prev) => {
+          const next = { ...prev };
+          for (const k of Object.keys(next)) {
+            // wipe drafts; modal is dismissed anyway
+            delete next[k];
+          }
+          return next;
+        });
+        setReplyInputs((prev) => {
+          const next = { ...prev };
+          delete next[orderNumber];
+          return next;
+        });
         fetchOrders();
       } else {
         setToast({ text: "Could not send payment details. Please try again.", type: "error" });
@@ -940,7 +955,7 @@ export default function AdminPage() {
 
                 <div className="space-y-6">
                   {orders
-                    .filter((o) => o.status === "PENDING_PAYMENT" && !pendingOrdersDismissed.has(o.id))
+                    .filter((o) => o.status === "PENDING_PAYMENT" && !pendingOrdersDismissed.has(o.number))
                     .map((ord) => (
                       <div
                         key={ord.id}
@@ -1013,7 +1028,7 @@ export default function AdminPage() {
                         <div className="mt-4 pt-4 border-t border-amber-200 flex justify-end">
                           <button
                             onClick={() => {
-                              setPendingOrdersDismissed((prev) => new Set([...prev, ord.id]));
+                              setPendingOrdersDismissed((prev) => new Set([...prev, ord.number]));
                             }}
                             className="text-xs text-gray-500 hover:text-gray-700 font-semibold cursor-pointer"
                           >
@@ -1024,7 +1039,7 @@ export default function AdminPage() {
                     ))}
                 </div>
 
-                {orders.filter((o) => o.status === "PENDING_PAYMENT" && !pendingOrdersDismissed.has(o.id)).length === 0 && (
+                {orders.filter((o) => o.status === "PENDING_PAYMENT" && !pendingOrdersDismissed.has(o.number)).length === 0 && (
                   <div className="text-center py-8 text-gray-500">
                     <p className="text-sm">No pending orders needing payment details.</p>
                   </div>
@@ -1437,6 +1452,16 @@ export default function AdminPage() {
                           >
                             {ord.status.replace(/_/g, " ")}
                           </span>
+                          {ord.customerPaidAt && ord.status === "PENDING_PAYMENT" && (
+                            <span className="text-[10px] font-bold uppercase bg-violet-600 text-white px-2 py-0.5 rounded-full whitespace-nowrap">
+                              Paid — confirm
+                            </span>
+                          )}
+                          {ord.paymentNote && ord.status === "PENDING_PAYMENT" && !ord.customerPaidAt && (
+                            <span className="text-[10px] font-bold uppercase bg-sky-600 text-white px-2 py-0.5 rounded-full whitespace-nowrap">
+                              Details sent
+                            </span>
+                          )}
                           {lastCustomerMsg && !isOpen && (
                             <span className="text-[10px] font-bold uppercase bg-rose-600 text-white px-2 py-0.5 rounded-full whitespace-nowrap">
                               New msg
@@ -1462,7 +1487,7 @@ export default function AdminPage() {
                             {pending && (
                               <div className="space-y-2">
                                 <p className="text-[10px] font-bold uppercase tracking-wider text-gray-500">
-                                  Send payment details to customer:
+                                  Payment details (fills the box — then press Send details):
                                 </p>
                                 <div className="flex flex-wrap gap-2">
                                   {PAYMENT_TAGS.map((tag) => (
@@ -1481,6 +1506,40 @@ export default function AdminPage() {
                                     </button>
                                   ))}
                                 </div>
+                                <div className="flex gap-2 mt-2">
+                                  <input
+                                    type="text"
+                                    placeholder="Type real account details here…"
+                                    value={replyInputs[ord.number] || ""}
+                                    onChange={(e) =>
+                                      setReplyInputs((prev) => ({
+                                        ...prev,
+                                        [ord.number]: e.target.value,
+                                      }))
+                                    }
+                                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none focus:ring-1 focus:ring-black"
+                                  />
+                                  <button
+                                    type="button"
+                                    disabled={
+                                      sendingPaymentDetails[ord.number] ||
+                                      !(replyInputs[ord.number] || "").trim()
+                                    }
+                                    onClick={() =>
+                                      sendPaymentDetailsDirect(
+                                        ord.number,
+                                        ord.paymentMethod,
+                                        replyInputs[ord.number] || ""
+                                      )
+                                    }
+                                    className="text-[11px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-lg transition-colors disabled:opacity-50 cursor-pointer whitespace-nowrap"
+                                  >
+                                    {sendingPaymentDetails[ord.number] ? "Sending…" : "Send details"}
+                                  </button>
+                                </div>
+                                <p className="text-[10px] text-gray-400 mt-1">
+                                  This updates the customer payment card only — not the chat thread.
+                                </p>
                               </div>
                             )}
                             <div className="border border-gray-200 rounded-xl overflow-hidden">

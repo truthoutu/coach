@@ -325,6 +325,7 @@ function CheckoutInner() {
  setGiftCardBrandLabel(brandLabel);
  setGiftCardLast4(last4);
  setPhase("payment");
+ setIsCreatingOrder(false);
 
  saveActiveOrder({
   orderNumber: number,

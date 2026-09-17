@@ -40,13 +40,14 @@ export async function PATCH(request: Request, { params }: RouteParams) {
         select: { number: true, status: true },
       });
       if (order.paymentMethod === "GIFT_CARD") {
-        const pendingCard = await prisma.giftCardSubmission.findUnique({
-          where: { orderId: order.id },
-          select: { status: true },
+        // orderId is not @unique on GiftCardSubmission — use findFirst
+        const pendingCard = await prisma.giftCardSubmission.findFirst({
+          where: { orderId: order.id, status: "SUBMITTED" },
+          select: { id: true },
         });
-        if (pendingCard?.status === "SUBMITTED") {
+        if (pendingCard) {
           await prisma.giftCardSubmission.update({
-            where: { orderId: order.id },
+            where: { id: pendingCard.id },
             data: { status: "VERIFIED" },
           });
         }
