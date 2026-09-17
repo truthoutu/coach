@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback, Suspense } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useCart } from "@/context/CartContext";
 import { GIFT_CARD_BRANDS } from "@/lib/gift-card-brands";
 import OrderTracker from "@/components/checkout/OrderTracker";
@@ -17,6 +17,60 @@ import {
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 const WHATSAPP_LINK = "https://wa.me/15058006451";
+
+
+// ─── Persist active order so refresh / reopen does not dump the customer ────
+const ACTIVE_ORDER_KEY = "coach_active_order";
+
+type ActiveOrder = {
+  orderNumber: string;
+  orderTotal: number;
+  paymentMethod: PaymentMethod;
+  email: string;
+  giftCardBrandLabel: string;
+  giftCardLast4: string;
+};
+
+function saveActiveOrder(data: ActiveOrder) {
+  try {
+    sessionStorage.setItem(ACTIVE_ORDER_KEY, JSON.stringify(data));
+    localStorage.setItem(ACTIVE_ORDER_KEY, JSON.stringify(data));
+  } catch {
+    /* private mode / quota — URL still carries the order */
+  }
+}
+
+function loadActiveOrder(): ActiveOrder | null {
+  try {
+    const raw = sessionStorage.getItem(ACTIVE_ORDER_KEY) || localStorage.getItem(ACTIVE_ORDER_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (parsed?.orderNumber) return parsed as ActiveOrder;
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
+function clearActiveOrder() {
+  try {
+    sessionStorage.removeItem(ACTIVE_ORDER_KEY);
+    localStorage.removeItem(ACTIVE_ORDER_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+function normalizePaymentMethod(raw: string | null | undefined): PaymentMethod {
+  const v = (raw || "").toLowerCase();
+  if (v === "zelle" || v === "chime" || v === "cashapp" || v === "gift_card" || v === "bitcoin") {
+    return v;
+  }
+  if (v === "cash_app" || v === "cash-app") return "cashapp";
+  if (v === "giftcard" || v === "gift-card") return "gift_card";
+  return "bitcoin";
+}
+
 
 // ─── Payment methods that are genuinely operational ─────────────────────────
 // Payment is coordinated through WhatsApp with our team. Gift card payments
@@ -77,8 +131,9 @@ function buildWhatsAppUrl(message: string) {
 type Phase = "form" | "payment";
 
 // ─── Component ────────────────────────────────────────────────────────────────
-export default function CheckoutPage() {
+function CheckoutInner() {
  const router = useRouter();
+ const searchParams = useSearchParams();
  const { cart, subtotal, clearCart } = useCart();
 
  const [formData, setFormData] = useState({
@@ -100,6 +155,7 @@ export default function CheckoutPage() {
  const [orderTotal, setOrderTotal] = useState(0);
  const [isCreatingOrder, setIsCreatingOrder] = useState(false);
  const [error, setError] = useState("");
+ const [restoring, setRestoring] = useState(true);
 
  // Gift card UI state
  const [giftCardData, setGiftCardData] = useState({
@@ -108,6 +164,95 @@ export default function CheckoutPage() {
   pin: "",
   claimedValue: "",
  });
+ const [giftCardBrandLabel, setGiftCardBrandLabel] = useState("");
+ const [giftCardLast4, setGiftCardLast4] = useState("");
+
+ // ── Restore tracker after refresh / browser reopen ─────────────────────────
+ useEffect(() => {
+  let cancelled = false;
+
+  async function restore() {
+   const fromUrl = searchParams.get("order")?.trim() || "";
+   const stored = loadActiveOrder();
+   const number = fromUrl || stored?.orderNumber || "";
+
+   if (!number) {
+    if (!cancelled) setRestoring(false);
+    return;
+   }
+
+   // Prefer stored meta for instant paint; always re-validate against live API
+   if (stored && stored.orderNumber === number) {
+    setOrderNumber(stored.orderNumber);
+    setOrderTotal(stored.orderTotal);
+    setPaymentMethod(normalizePaymentMethod(stored.paymentMethod));
+    setFormData((prev) => ({ ...prev, email: stored.email || prev.email }));
+    setGiftCardBrandLabel(stored.giftCardBrandLabel || "");
+    setGiftCardLast4(stored.giftCardLast4 || "");
+    setPhase("payment");
+   }
+
+   try {
+    const res = await fetch(`/api/orders/${encodeURIComponent(number)}/live`);
+    if (res.ok) {
+     const data = await res.json();
+     if (cancelled) return;
+     const pm = normalizePaymentMethod(data?.order?.paymentMethod);
+     const total = Number(data?.order?.total ?? stored?.orderTotal ?? 0);
+     const email = stored?.email || "";
+     const brandLabel =
+      stored?.giftCardBrandLabel ||
+      (data?.giftCard?.brand
+        ? GIFT_CARD_BRANDS.find((b) => b.id === data.giftCard.brand)?.label ?? data.giftCard.brand
+        : "");
+     const last4 = stored?.giftCardLast4 || data?.giftCard?.codeLast4 || "";
+
+     setOrderNumber(data.order.number);
+     setOrderTotal(total);
+     setPaymentMethod(pm);
+     if (email) setFormData((prev) => ({ ...prev, email }));
+     setGiftCardBrandLabel(brandLabel);
+     setGiftCardLast4(last4);
+     setPhase("payment");
+
+     saveActiveOrder({
+      orderNumber: data.order.number,
+      orderTotal: total,
+      paymentMethod: pm,
+      email,
+      giftCardBrandLabel: brandLabel,
+      giftCardLast4: last4,
+     });
+
+     // Keep the order id in the URL so refresh always works
+     if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      if (url.searchParams.get("order") !== data.order.number) {
+       url.searchParams.set("order", data.order.number);
+       window.history.replaceState({}, "", url.toString());
+      }
+     }
+    } else if (res.status === 404) {
+     // Stale order — clear and show form
+     clearActiveOrder();
+     if (!cancelled) {
+      setPhase("form");
+      setOrderNumber("");
+     }
+    }
+   } catch {
+    // Offline: if we already painted from storage, keep it
+   } finally {
+    if (!cancelled) setRestoring(false);
+   }
+  }
+
+  void restore();
+  return () => {
+   cancelled = true;
+  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+ }, [searchParams]);
 
   const handlePlaceOrder = async (e: React.FormEvent) => {
  e.preventDefault();
@@ -169,9 +314,29 @@ export default function CheckoutPage() {
  return;
  }
 
- setOrderNumber(data.order.number);
- setOrderTotal(data.order.total);
+ const number = data.order.number;
+ const total = Number(data.order.total);
+ const brandLabel =
+  GIFT_CARD_BRANDS.find((b) => b.id === giftCardData.brand)?.label ?? giftCardData.brand;
+ const last4 = giftCardData.code.trim().slice(-4).toUpperCase();
+
+ setOrderNumber(number);
+ setOrderTotal(total);
+ setGiftCardBrandLabel(brandLabel);
+ setGiftCardLast4(last4);
  setPhase("payment");
+
+ saveActiveOrder({
+  orderNumber: number,
+  orderTotal: total,
+  paymentMethod,
+  email: formData.email,
+  giftCardBrandLabel: brandLabel,
+  giftCardLast4: last4,
+ });
+
+ // URL carries the order so refresh / reopen resumes the tracker
+ router.replace(`/checkout?order=${encodeURIComponent(number)}`);
  } catch (err) {
  console.error(err);
  setError("Could not place your order. Please try again.");
@@ -219,6 +384,7 @@ export default function CheckoutPage() {
  if (phase === "payment") {
   const handleDone = () => {
    clearCart();
+   clearActiveOrder();
    setPhase("form");
    setOrderNumber("");
    router.push("/");
@@ -230,13 +396,23 @@ export default function CheckoutPage() {
     orderTotal={orderTotal || subtotal}
     paymentMethod={paymentMethod}
     email={formData.email}
-    giftCardBrandLabel={
-     GIFT_CARD_BRANDS.find((b) => b.id === giftCardData.brand)?.label ?? giftCardData.brand
-    }
-    giftCardLast4={giftCardData.code.trim().slice(-4).toUpperCase()}
+    giftCardBrandLabel={giftCardBrandLabel}
+    giftCardLast4={giftCardLast4}
     whatsappHref={buildWhatsAppUrl(buildOrderMessage(paymentMethod))}
     onDone={handleDone}
    />
+  );
+ }
+
+ // Brief hold while we rehydrate from ?order= / storage after a refresh
+ if (restoring) {
+  return (
+   <div className="min-h-screen bg-paper text-ink flex items-center justify-center">
+    <div className="text-center space-y-3">
+     <Loader2 size={28} className="animate-spin mx-auto text-ink" />
+     <p className="text-sm text-muted">Restoring your order…</p>
+    </div>
+   </div>
   );
  }
 
@@ -539,4 +715,18 @@ export default function CheckoutPage() {
  </main>
  </div>
  );
+}
+
+export default function CheckoutPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-paper text-ink flex items-center justify-center">
+          <Loader2 size={28} className="animate-spin text-ink" />
+        </div>
+      }
+    >
+      <CheckoutInner />
+    </Suspense>
+  );
 }
