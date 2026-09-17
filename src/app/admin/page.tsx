@@ -97,13 +97,13 @@ interface AdminMessage {
 
 const CATEGORIES = ["Bags", "Shoes", "Wallets", "Accessories", "Small Leather Goods", "Ready-To-Wear"];
 
-// ── Quick payment details ("tags") the admin sends to customers ─────────────
-// ⚠️ EDIT THESE to the store's real handles / addresses.
+// ── Quick starter templates — NO account numbers baked in.
+// Click a tag → fills the input bar. Admin types the real details, then hits Send.
 const PAYMENT_TAGS: { label: string; body: string }[] = [
-  { label: "💜 Zelle", body: "💜 Send your Zelle payment to: 505-800-6451 (name: COACH 1). Reply \"I have paid\" here once sent." },
-  { label: "💚 Cash App", body: "💚 Send your Cash App payment to: $CoachOne. Reply \"I have paid\" here once sent." },
-  { label: "🟢 Chime", body: "🟢 Send your Chime payment to: 505-800-6451. Reply \"I have paid\" here once sent." },
-  { label: "₿ Bitcoin", body: "₿ Send exactly the order total in BTC to: bc1qjs86eudh7t00de2f9e94zy6p8pcznjhyqqh3w8 — then reply here with the transaction ID." },
+  { label: "💜 Zelle", body: "💜 Send your Zelle payment to: " },
+  { label: "💚 Cash App", body: "💚 Send your Cash App payment to: " },
+  { label: "🟢 Chime", body: "🟢 Send your Chime payment to: " },
+  { label: "₿ Bitcoin", body: "₿ Send exactly the order total in BTC to: " },
 ];
 
 /** Short notification beep (WebAudio). Safe no-op when unsupported. */
@@ -443,13 +443,11 @@ export default function AdminPage() {
   async function sendPaymentDetailsDirect(orderNumber: string, paymentMethod: string, customDetails: string) {
     setSendingPaymentDetails((prev) => ({ ...prev, [orderNumber]: true }));
     try {
-      // Get the appropriate payment message based on method
-      let message = "";
-      if (customDetails.trim()) {
-        message = customDetails.trim();
-      } else {
-        const tag = PAYMENT_TAGS.find((t) => t.label.toLowerCase().includes(paymentMethod.toLowerCase()));
-        message = tag ? tag.body : `Payment details for ${paymentMethod}`;
+      // Manual only — never invent account numbers. Admin must type the details.
+      const message = customDetails.trim();
+      if (!message) {
+        setToast({ text: "Type the payment details first, then send.", type: "error" });
+        return;
       }
 
       const res = await fetch(`/api/orders/${encodeURIComponent(orderNumber)}/messages`, {
