@@ -979,11 +979,16 @@ export default function AdminPage() {
                             {PAYMENT_TAGS.map((tag) => (
                               <button
                                 key={tag.label}
-                                onClick={() => sendPaymentDetailsDirect(ord.number, ord.paymentMethod, tag.body)}
-                                disabled={sendingPaymentDetails[ord.number]}
-                                className="text-xs font-bold bg-slate-900 hover:bg-black text-white px-4 py-2.5 rounded-lg transition-colors disabled:opacity-50 cursor-pointer"
+                                type="button"
+                                onClick={() =>
+                                  setPaymentDetailInputs((prev) => ({
+                                    ...prev,
+                                    [ord.id]: tag.body,
+                                  }))
+                                }
+                                className="text-xs font-bold bg-slate-900 hover:bg-black text-white px-4 py-2.5 rounded-lg transition-colors cursor-pointer"
                               >
-                                {sendingPaymentDetails[ord.number] ? "Sending..." : tag.label}
+                                {tag.label}
                               </button>
                             ))}
                           </div>
@@ -991,7 +996,7 @@ export default function AdminPage() {
                           {/* Custom message input */}
                           <div className="mt-3">
                             <textarea
-                              placeholder="Or type custom payment details..."
+                              placeholder="Type payment details here (or click a tag above to fill)…"
                               value={paymentDetailInputs[ord.id] || ""}
                               onChange={(e) => setPaymentDetailInputs((prev) => ({ ...prev, [ord.id]: e.target.value }))}
                               rows={2}
@@ -1465,9 +1470,14 @@ export default function AdminPage() {
                                   {PAYMENT_TAGS.map((tag) => (
                                     <button
                                       key={tag.label}
-                                      onClick={() => sendQuickTag(ord.number, tag.body)}
-                                      disabled={sendingReply[ord.number]}
-                                      className="text-[11px] font-bold bg-slate-900 hover:bg-black text-white px-3 py-2 rounded-lg transition-colors disabled:opacity-50 cursor-pointer"
+                                      type="button"
+                                      onClick={() =>
+                                        setReplyInputs((prev) => ({
+                                          ...prev,
+                                          [ord.number]: tag.body,
+                                        }))
+                                      }
+                                      className="text-[11px] font-bold bg-slate-900 hover:bg-black text-white px-3 py-2 rounded-lg transition-colors cursor-pointer"
                                     >
                                       {tag.label}
                                     </button>

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   Banknote,
   Check,
@@ -9,7 +9,6 @@ import {
   Gift,
   Loader2,
   MessageCircle,
-  Send,
   XCircle,
 } from "lucide-react";
 import { GIFT_CARD_BRANDS } from "@/lib/gift-card-brands";
@@ -114,7 +113,6 @@ export default function OrderTracker({
   const [live, setLive] = useState<LiveState | null>(null);
   const [paidClicked, setPaidClicked] = useState(false);
   const [holdLineIndex, setHoldLineIndex] = useState(0);
-  const [msgInput, setMsgInput] = useState("");
   const [sendingMsg, setSendingMsg] = useState(false);
   const [btcCopied, setBtcCopied] = useState(false);
 
@@ -125,8 +123,6 @@ export default function OrderTracker({
   const [retryValue, setRetryValue] = useState("");
   const [retrying, setRetrying] = useState(false);
   const [retryError, setRetryError] = useState("");
-
-  const threadRef = useRef<HTMLDivElement>(null);
 
   // ── Poll live state every 4s ───────────────────────────────────────────────
   const poll = useCallback(async () => {
@@ -168,8 +164,6 @@ export default function OrderTracker({
   const orderStatus = live?.order?.status ?? "PENDING_PAYMENT";
   const giftCard = live?.giftCard ?? null;
   const giftRejected = giftCard?.status === "REJECTED";
-  const messages = live?.messages ?? [];
-
   // Payment details come ONLY from Order.paymentNote (admin typed them via the
   // dedicated "Send payment details" flow). They are NOT chat messages — the
   // live thread stays for real conversation via the message bar.
@@ -178,14 +172,6 @@ export default function OrderTracker({
     paymentMethod !== "bitcoin" &&
     paymentMethod !== "gift_card" &&
     !!paymentDetailsText;
-
-  // Thread = real conversation only. Hide any legacy payment-detail bubbles
-  // that were posted as chat before this fix (body matches paymentNote).
-  const threadMessages = paymentDetailsText
-    ? messages.filter(
-        (m) => !(m.senderRole === "ADMIN" && m.body.trim() === paymentDetailsText)
-      )
-    : messages;
 
   // Persist paid state across refresh once the server has customerPaidAt
   const serverPaid = !!live?.order?.customerPaidAt;
@@ -276,11 +262,6 @@ export default function OrderTracker({
       setRetrying(false);
     }
   };
-
-  // Auto-scroll the thread
-  useEffect(() => {
-    if (threadRef.current) threadRef.current.scrollTop = threadRef.current.scrollHeight;
-  }, [threadMessages.length]);
 
   return (
     <div className="min-h-screen bg-paper text-ink">
@@ -570,66 +551,6 @@ export default function OrderTracker({
             )}
           </div>
         )}
-        <div className="bg-white border border-hairline">
-          <div className="px-5 py-3.5 border-b border-hairline flex items-center justify-between">
-            <p className="text-sm font-bold">Live thread with our team</p>
-            <span className="text-[10px] uppercase tracking-wider text-muted flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> Live
-            </span>
-          </div>
-          <div ref={threadRef} className="px-5 py-4 space-y-3 max-h-72 overflow-y-auto">
-            {threadMessages.length === 0 ? (
-              <p className="text-[13px] text-muted py-2">
-                No messages yet — our team has been notified and will reply here shortly.
-              </p>
-            ) : (
-              threadMessages.map((m) => (
-                <div
-                  key={m.id}
-                  className={`max-w-[85%] rounded-lg px-3.5 py-2.5 text-[13px] leading-relaxed ${
-                    m.senderRole === "ADMIN"
-                      ? "bg-canvas border border-hairline text-ink"
-                      : "bg-ink text-white ml-auto"
-                  }`}
-                >
-                  <p className="whitespace-pre-wrap break-words">{m.body}</p>
-                  <p className={`text-[10px] mt-1 ${m.senderRole === "ADMIN" ? "text-muted" : "text-white/60"}`}>
-                    {m.senderRole === "ADMIN" ? "COACH 1 Team" : "You"} ·{" "}
-                    {new Date(m.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                  </p>
-                </div>
-              ))
-            )}
-          </div>
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              const text = msgInput.trim();
-              if (!text) return;
-              setMsgInput("");
-              sendMessage(text);
-            }}
-            className="px-5 py-3.5 border-t border-hairline flex items-center gap-2"
-          >
-            <input
-              type="text"
-              placeholder="Write a message…"
-              value={msgInput}
-              onChange={(e) => setMsgInput(e.target.value)}
-              maxLength={1000}
-              className="flex-1 px-3 py-2.5 border border-hairline text-sm outline-none focus:border-ink transition-colors bg-white"
-            />
-            <button
-              type="submit"
-              disabled={sendingMsg || !msgInput.trim()}
-              className="p-2.5 bg-ink text-white hover:bg-black transition-colors disabled:opacity-50 cursor-pointer"
-              aria-label="Send message"
-            >
-              {sendingMsg ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
-            </button>
-          </form>
-        </div>
-
         <a
           href={whatsappHref}
           target="_blank"
