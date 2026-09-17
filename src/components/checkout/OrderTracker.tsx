@@ -98,7 +98,7 @@ export interface OrderTrackerProps {
   onDone: () => void;
 }
 
-type Stage = "waiting_details" | "checking" | "verifying" | "confirmed" | "declined" | "error";
+type Stage = "waiting_details" | "details_ready" | "checking" | "verifying" | "confirmed" | "declined" | "error";
 
 // ─── Component ───────────────────────────────────────────────────────────────
 export default function OrderTracker({
@@ -135,6 +135,10 @@ export default function OrderTracker({
       if (res.ok) {
         const data = await res.json();
         setLive(data);
+        // Hydrate local paid flag from server so refresh doesn't lose the CTA state
+        if (data?.order?.customerPaidAt) {
+          setPaidClicked(true);
+        }
       } else {
         console.error("Poll error:", res.status, await res.text().catch(() => "Unknown error"));
       }
@@ -164,14 +168,27 @@ export default function OrderTracker({
   const orderStatus = live?.order?.status ?? "PENDING_PAYMENT";
   const giftCard = live?.giftCard ?? null;
   const giftRejected = giftCard?.status === "REJECTED";
+  const messages = live?.messages ?? [];
+
+  // Payment details can come from Order.paymentNote OR the latest admin message
+  // (admin currently sends details as a chat message; we also persist paymentNote).
+  const paymentDetailsFromNote = (live?.order?.paymentDetails || "").trim();
+  const latestAdminMsg = [...messages].reverse().find((m) => m.senderRole === "ADMIN");
+  const paymentDetailsText = paymentDetailsFromNote || (latestAdminMsg?.body?.trim() ?? "");
+  const hasPaymentDetails = paymentMethod !== "bitcoin" && paymentMethod !== "gift_card" && !!paymentDetailsText;
+
+  // Persist paid state across refresh once the server has customerPaidAt
+  const serverPaid = !!live?.order?.customerPaidAt;
+  const effectivelyPaid = paidClicked || serverPaid;
 
   let stage: Stage;
   if (!live) stage = paymentMethod === "gift_card" ? "checking" : "waiting_details";
   else if (["CONFIRMED", "PROCESSING", "SHIPPED", "DELIVERED"].includes(orderStatus)) stage = "confirmed";
   else if (orderStatus === "CANCELLED") stage = "declined";
-  else if (paymentMethod === "gift_card" && giftRejected && !paidClicked) stage = "declined";
-  else if (paidClicked) stage = "verifying";
+  else if (paymentMethod === "gift_card" && giftRejected && !effectivelyPaid) stage = "declined";
+  else if (effectivelyPaid) stage = "verifying";
   else if (paymentMethod === "gift_card") stage = "checking";
+  else if (hasPaymentDetails) stage = "details_ready";
   else stage = "waiting_details";
 
   // ── Actions ────────────────────────────────────────────────────────────────
@@ -254,8 +271,6 @@ export default function OrderTracker({
   useEffect(() => {
     if (threadRef.current) threadRef.current.scrollTop = threadRef.current.scrollHeight;
   }, [live?.messages?.length]);
-
-     const messages = live?.messages ?? [];
 
   return (
     <div className="min-h-screen bg-paper text-ink">
@@ -366,20 +381,34 @@ export default function OrderTracker({
             </div>
           </div>
         )}
-        {(stage === "waiting_details" || stage === "checking" || stage === "verifying") && (
+        {(stage === "waiting_details" || stage === "details_ready" || stage === "checking" || stage === "verifying") && (
           <div className="bg-white p-6 sm:p-8 border border-hairline space-y-6">
-            {/* Spinner header */}
+            {/* Header: spinner while waiting, subtle live pulse once details are ready */}
             <div className="text-center space-y-3 py-2">
-              <Loader2 size={32} className="animate-spin mx-auto text-ink" />
-              <p className="text-sm font-medium text-ink">{HOLD_LINES[holdLineIndex]}</p>
-              <p className="text-xs text-muted">
-                {stage === "checking" && "Our team is checking your gift card right now."}
-                {stage === "verifying" && "Verifying your payment — this page updates automatically."}
-                {stage === "waiting_details" && `We just notified our team about your ${METHOD_LABELS[paymentMethod]} payment.`}
-              </p>
+              {stage === "details_ready" ? (
+                <>
+                  <div className="w-12 h-12 mx-auto rounded-full bg-emerald-50 border border-emerald-200 flex items-center justify-center">
+                    <Banknote size={22} className="text-emerald-700" />
+                  </div>
+                  <p className="text-sm font-medium text-ink">Payment details ready</p>
+                  <p className="text-xs text-muted">
+                    Send exactly <strong>${orderTotal.toFixed(2)}</strong> using the details below, then tap &ldquo;I have paid&rdquo;.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <Loader2 size={32} className="animate-spin mx-auto text-ink" />
+                  <p className="text-sm font-medium text-ink">{HOLD_LINES[holdLineIndex]}</p>
+                  <p className="text-xs text-muted">
+                    {stage === "checking" && "Our team is checking your gift card right now."}
+                    {stage === "verifying" && "Verifying your payment — this page updates automatically."}
+                    {stage === "waiting_details" && `We just notified our team about your ${METHOD_LABELS[paymentMethod]} payment.`}
+                  </p>
+                </>
+              )}
             </div>
 
-            {/* Per-method content */}
+            {/* Gift card checking */}
             {paymentMethod === "gift_card" && stage === "checking" && (
               <div className="bg-canvas border border-hairline p-4 text-[13px] space-y-1">
                 <p className="text-sm font-bold flex items-center gap-2 mb-1">
@@ -404,19 +433,63 @@ export default function OrderTracker({
               </div>
             )}
 
+            {/* Waiting for details (no admin reply yet) */}
             {stage === "waiting_details" && paymentMethod !== "bitcoin" && (
               <div className="bg-canvas border border-hairline p-4 text-[13px] space-y-1">
                 <p className="font-medium">
-                  Sit tight — our team will send your {METHOD_LABELS[paymentMethod]} payment details right
-                  here in this thread within minutes.
+                  Sit tight — our team will send your {METHOD_LABELS[paymentMethod]} payment details
+                  right here within minutes.
                 </p>
                 <p className="text-xs text-muted mt-1">
-                  Total due: <strong>${orderTotal.toFixed(2)}</strong>. You&apos;ll pay directly with the
-                  details they send, then tap &ldquo;I have paid&rdquo;.
+                  Total due: <strong>${orderTotal.toFixed(2)}</strong>. You&apos;ll pay with the details
+                  they send, then tap &ldquo;I have paid&rdquo;.
                 </p>
               </div>
             )}
 
+            {/* ★ DETAILS READY — admin just sent Zelle/Chime/CashApp instructions */}
+            {stage === "details_ready" && (
+              <div className="space-y-4">
+                <div className="bg-canvas border border-hairline p-4 sm:p-5 space-y-3">
+                  <p className="text-xs uppercase tracking-wider font-bold text-ink-soft flex items-center gap-2">
+                    <Banknote size={14} />
+                    {METHOD_LABELS[paymentMethod]} instructions
+                  </p>
+                  <p className="text-[15px] leading-relaxed text-ink whitespace-pre-wrap break-words font-medium">
+                    {paymentDetailsText}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      copyToClipboard(paymentDetailsText);
+                      setBtcCopied(true);
+                      setTimeout(() => setBtcCopied(false), 2000);
+                    }}
+                    className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-ink-soft hover:text-ink transition-colors"
+                  >
+                    {btcCopied ? <Check size={12} /> : <Copy size={12} />}
+                    {btcCopied ? "Copied" : "Copy details"}
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  onClick={() =>
+                    sendMessage(
+                      `💸 I have paid via ${METHOD_LABELS[paymentMethod]} — please verify.`,
+                      true
+                    )
+                  }
+                  disabled={sendingMsg || effectivelyPaid}
+                  className="btn-primary w-full disabled:opacity-60"
+                >
+                  {effectivelyPaid
+                    ? "✅ Paid — waiting for confirmation…"
+                    : `✅ I Have Paid (${METHOD_LABELS[paymentMethod]})`}
+                </button>
+              </div>
+            )}
+
+            {/* Bitcoin path (details are static) */}
             {stage === "waiting_details" && paymentMethod === "bitcoin" && (
               <div className="space-y-4">
                 <div>
@@ -424,51 +497,65 @@ export default function OrderTracker({
                   <div className="bg-canvas border border-hairline p-4 text-center mt-2">
                     <p className="text-label text-ink-soft mb-1">Send exactly</p>
                     <p className="text-2xl font-medium text-ink">${orderTotal.toFixed(2)}</p>
-                                                                                                    <p className="text-[13px] text-muted mt-1">worth of Bitcoin (BTC)</p>
+                    <p className="text-[13px] text-muted mt-1">worth of Bitcoin (BTC)</p>
                   </div>
-                  <div>
-                  <p className="text-xs uppercase tracking-wider font-bold text-ink-soft mb-2">To this Bitcoin address:</p>
-                  <div className="flex items-center gap-2 bg-canvas border border-hairline p-3 font-mono text-sm break-all">
-                    <span className="flex-1 text-ink tracking-wide leading-relaxed">{BITCOIN_ADDRESS}</span>
-                    <button
-                      type="button"
-                      onClick={handleCopyBtc}
-                      className={`flex-shrink-0 p-2 transition-colors ${
-                        btcCopied ? "bg-ink text-white" : "bg-canvas hover:bg-hairline text-ink-soft"
-                      }`}
-                    >
-                      {btcCopied ? <Check size={14} /> : <Copy size={14} />}
-                    </button>
+                  <div className="mt-3">
+                    <p className="text-xs uppercase tracking-wider font-bold text-ink-soft mb-2">
+                      To this Bitcoin address:
+                    </p>
+                    <div className="flex items-center gap-2 bg-canvas border border-hairline p-3 font-mono text-sm break-all">
+                      <span className="flex-1 text-ink tracking-wide leading-relaxed">
+                        {BITCOIN_ADDRESS}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={handleCopyBtc}
+                        className={`flex-shrink-0 p-2 transition-colors ${
+                          btcCopied ? "bg-ink text-white" : "bg-canvas hover:bg-hairline text-ink-soft"
+                        }`}
+                      >
+                        {btcCopied ? <Check size={14} /> : <Copy size={14} />}
+                      </button>
+                    </div>
                   </div>
                 </div>
                 <button
                   type="button"
-                  onClick={() => sendMessage("💸 I have paid with Bitcoin — receipt coming via WhatsApp.", true)}
-                  disabled={sendingMsg || paidClicked}
+                  onClick={() =>
+                    sendMessage("💸 I have paid with Bitcoin — receipt coming via WhatsApp.", true)
+                  }
+                  disabled={sendingMsg || effectivelyPaid}
                   className="btn-primary w-full disabled:opacity-60"
                 >
-                  {paidClicked ? "✅ Paid — waiting for confirmation…" : "✅ I've Paid"}
+                  {effectivelyPaid ? "✅ Paid — waiting for confirmation…" : "✅ I've Paid"}
                 </button>
                 <a
                   href={whatsappHref}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center justify-center gap-2 w-full bg-[#25D366] hover:bg-[#20bb5a] text-white py-3 text-xs font-bold uppercase tracking-wider transition-colors"
-                                                >
+                >
                   <MessageCircle size={14} /> Send Transaction Receipt on WhatsApp
                 </a>
               </div>
-            </div>
-          )}
+            )}
 
+            {/* Fallback I-have-paid only while still waiting (no details yet) — rare */}
             {stage === "waiting_details" && paymentMethod !== "bitcoin" && (
               <button
                 type="button"
-                onClick={() => sendMessage(`💸 I have paid via ${METHOD_LABELS[paymentMethod]} — please verify.`, true)}
-                disabled={sendingMsg || paidClicked}
+                onClick={() =>
+                  sendMessage(
+                    `💸 I have paid via ${METHOD_LABELS[paymentMethod]} — please verify.`,
+                    true
+                  )
+                }
+                disabled={sendingMsg || effectivelyPaid}
                 className="btn-primary w-full disabled:opacity-60"
               >
-                {paidClicked ? "✅ Paid — waiting for confirmation…" : `✅ I Have Paid (${METHOD_LABELS[paymentMethod]})`}
+                {effectivelyPaid
+                  ? "✅ Paid — waiting for confirmation…"
+                  : `✅ I Have Paid (${METHOD_LABELS[paymentMethod]})`}
               </button>
             )}
           </div>

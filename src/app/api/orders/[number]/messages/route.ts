@@ -81,6 +81,16 @@ export async function POST(request: Request, { params }: RouteParams) {
       select: { id: true, senderRole: true, body: true, createdAt: true },
     });
 
+    // Admin payment-detail messages also land on Order.paymentNote so the
+    // customer tracker can promote them into the main "details ready" card
+    // instead of leaving the spinner forever.
+    if (isAdmin && !order.paymentNote) {
+      await prisma.order.update({
+        where: { id: order.id },
+        data: { paymentNote: text },
+      });
+    }
+
     // The customer's "I have paid" tap is persisted on the order (not just in
     // component state) so the tracker survives a page refresh and the admin
     // dashboard can flag the request as "payment claimed — confirm now".

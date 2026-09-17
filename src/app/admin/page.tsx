@@ -487,8 +487,16 @@ export default function AdminPage() {
     return () => clearInterval(id);
   }, [expandedOrder, liveOn]);
 
+  // Scroll only inside the thread panel — never yank the whole admin page to the top.
   useEffect(() => {
-    threadEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    const el = threadEndRef.current;
+    if (!el) return;
+    const panel = el.closest("[data-thread-scroll]") as HTMLElement | null;
+    if (panel) {
+      panel.scrollTop = panel.scrollHeight;
+    } else {
+      el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
   }, [expandedOrder, threadMessages]);
 
   async function handleOrderStatus(orderNumber: string, action: "confirm" | "cancel") {
@@ -1473,7 +1481,7 @@ export default function AdminPage() {
                                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> Live
                                 </span>
                               </div>
-                              <div className="px-3.5 py-3 space-y-2.5 max-h-64 overflow-y-auto">
+                              <div data-thread-scroll className="px-3.5 py-3 space-y-2.5 max-h-64 overflow-y-auto">
                                 {threadLoading[ord.number] ? (
                                   <p className="text-[11px] text-gray-400 font-mono py-3 text-center">Loading thread…</p>
                                 ) : thread.length === 0 ? (
