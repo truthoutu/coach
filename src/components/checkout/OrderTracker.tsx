@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
+  Banknote,
   Check,
   CheckCircle2,
   Copy,
@@ -15,6 +16,34 @@ import { GIFT_CARD_BRANDS } from "@/lib/gift-card-brands";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 const BITCOIN_ADDRESS = "bc1qjs86eudh7t00de2f9e94zy6p8pcznjhyqqh3w8";
+
+/**
+ * Clipboard write with a legacy `execCommand` fallback for browsers where the
+ * async Clipboard API is unavailable or the page is not a secure context.
+ */
+function copyToClipboard(text: string) {
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(text).catch(() => legacyCopy(text));
+    return;
+  }
+  legacyCopy(text);
+}
+
+function legacyCopy(text: string) {
+  try {
+    const el = document.createElement("textarea");
+    el.value = text;
+    el.style.position = "fixed";
+    el.style.opacity = "0";
+    document.body.appendChild(el);
+    el.focus();
+    el.select();
+    document.execCommand("copy");
+    document.body.removeChild(el);
+  } catch {
+    /* silent — the customer can still select the text manually */
+  }
+}
 
 const HOLD_LINES = [
   "Please hold while we check…",
@@ -38,7 +67,16 @@ interface LiveMessage {
 }
 
 interface LiveState {
-  order: { number: string; status: string; paymentMethod: string; total: number };
+  order: {
+    number: string;
+    status: string;
+    paymentMethod: string;
+    total: number;
+    /** Payment details the admin typed for this order, if already sent. */
+    paymentDetails: string | null;
+    /** Set once the customer taps "I have paid" — persists across refreshes. */
+    customerPaidAt: string | null;
+  };
   giftCard: {
     brand: string;
     codeLast4: string;
@@ -96,8 +134,14 @@ export default function OrderTracker({
       const res = await fetch(
         `/api/orders/${encodeURIComponent(orderNumber)}/live?email=${encodeURIComponent(email)}`
       );
-      if (res.ok) setLive(await res.json());
-    } catch {
+      if (res.ok) {
+        const data = await res.json();
+        setLive(data);
+      } else {
+        console.error("Poll error:", res.status, await res.text().catch(() => "Unknown error"));
+      }
+    } catch (err) {
+      console.error("Poll network error:", err);
       /* transient network errors are fine — the next tick retries */
     }
   }, [orderNumber, email]);

@@ -23,13 +23,25 @@ export async function GET(request: Request, { params }: RouteParams) {
       where: { number },
     });
 
-    if (!order || !email || order.email.trim().toLowerCase() !== email) {
+    if (!order) {
+      console.error("Order not found:", number);
+      return NextResponse.json({ error: "Order not found" }, { status: 404 });
+    }
+
+    if (!email) {
+      console.error("No email provided for order:", number);
+      return NextResponse.json({ error: "Email required" }, { status: 400 });
+    }
+
+    const orderEmail = order.email.trim().toLowerCase();
+    if (orderEmail !== email) {
+      console.error("Email mismatch for order:", number, "provided:", email, "stored:", orderEmail);
       return NextResponse.json({ error: "Order not found" }, { status: 404 });
     }
 
     const orderId = order.id;
     const [gift, threadRows] = await Promise.all([
-      prisma.giftCardSubmission.findUnique({
+      prisma.giftCardSubmission.findFirst({
         where: { orderId },
         select: {
           brand: true,
@@ -58,6 +70,10 @@ export async function GET(request: Request, { params }: RouteParams) {
         status: order.status,
         paymentMethod: order.paymentMethod,
         total: order.total.toNumber(),
+        // Payment details the admin typed for this customer, if already sent.
+        paymentDetails: order.paymentNote,
+        // Set when the customer taps "I have paid" — survives a page refresh.
+        customerPaidAt: order.customerPaidAt,
       },
       giftCard: gift
         ? {
