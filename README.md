@@ -9,7 +9,7 @@ Modern luxury e-commerce platform built with Next.js 16, TypeScript, Prisma, and
 - **Multiple Payment Methods** - Bitcoin, Credit Card, Zelle, Chime, Gift Cards
 - **Admin Dashboard** - Manage products and campaigns
 - **Campaign Management** - Featured banners and promotional content
-- **Tawk.to Live Chat** - Global live-chat widget (replaces the legacy WhatsApp floating button)
+- **Tawk.to Live Chat** - Global live-chat widget
 - **Responsive Design** - Mobile-first, fully responsive UI
 
 ## 📦 Tech Stack
@@ -103,7 +103,6 @@ Visit `/admin` on your deployed site and manually add products and campaigns.
 
 ## 📱 Contact Information
 
-- **WhatsApp:** https://wa.me/15058006451
 - **Bitcoin Address:** `bc1qjs86eudh7t00de2f9e94zy6p8pcznjhyqqh3w8`
 
 ## 📁 Project Structure
@@ -177,18 +176,13 @@ npm run db:seed      # Seed database with initial data
 ## 🎨 Customization
 
 ### Configure Tawk.to Live Chat
-The Tawk widget replaces the old WhatsApp floating button. It is the **single** chat integration point, rendered from `src/app/layout.tsx` via `src/components/layout/FloatingChat.tsx`, and loads exactly once per page session (client-side only). Tawk controls the widget's appearance, position, and behavior from the Tawk.to dashboard — no custom floating button exists anymore.
+The Tawk widget is the **single** chat integration point, rendered from `src/app/layout.tsx` via `src/components/layout/FloatingChat.tsx`, and loads exactly once per page session (client-side only). Tawk controls the widget's appearance, position, and behavior from the Tawk.to dashboard — no custom floating button exists anymore.
 
 The **official owner-supplied credentials** are baked into the component:
 - `NEXT_PUBLIC_TAWK_PROPERTY_ID=6aa17322094d073447a182b4`
 - `NEXT_PUBLIC_TAWK_WIDGET_ID=1k23ajhur`
 
 These are public embed identifiers (part of the official embed script served to every visitor) — safe for the browser. You do **not** need to set anything to enable the widget. If you ever need a different widget (e.g. staging), you can override per environment with the same `NEXT_PUBLIC_*` vars (see `.env.example`).
-
-### Update WhatsApp Number (checkout support / footer only)
-Edit in:
-- `src/components/layout/Footer.tsx`
-- `src/app/checkout/page.tsx`
 
 ### Update Bitcoin Address
 Edit in:
@@ -221,4 +215,3 @@ Private - All rights reserved
 ## 🤝 Support
 
 - **Live chat:** Tawk.to widget (configured via `NEXT_PUBLIC_TAWK_PROPERTY_ID` / `NEXT_PUBLIC_TAWK_WIDGET_ID`)
-- **WhatsApp (checkout support):** https://wa.me/15058006451
