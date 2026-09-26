@@ -5,8 +5,6 @@ import Link from "next/link";
 import { Mail, MessageCircle } from "lucide-react";
 import NewsletterForm from "./NewsletterForm";
 
-const WHATSAPP_LINK = "https://wa.me/15058006451";
-
 const LINK_COLUMNS: { heading: string; links: { label: string; href: string }[] }[] = [
   {
     heading: "Customer Care",
@@ -108,16 +106,7 @@ export default function Footer() {
                 {social.label}
               </a>
             ))}
-                  </div>
-          <a
-            href={WHATSAPP_LINK}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 text-[13px] text-ink-soft hover:text-ink transition-colors"
-          >
-            <MessageCircle className="w-4 h-4" strokeWidth={1.5} />
-            WhatsApp support
-          </a>
+          </div>
           <a
             href="mailto:wcoach24@gmail.com"
             className="inline-flex items-center gap-2 text-[13px] text-ink-soft hover:text-ink transition-colors"
