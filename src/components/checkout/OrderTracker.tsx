@@ -8,7 +8,6 @@ import {
   Copy,
   Gift,
   Loader2,
-  MessageCircle,
   XCircle,
 } from "lucide-react";
 import { GIFT_CARD_BRANDS } from "@/lib/gift-card-brands";
@@ -93,7 +92,6 @@ export interface OrderTrackerProps {
   email: string;
   giftCardBrandLabel: string;
   giftCardLast4: string;
-  whatsappHref: string;
   onDone: () => void;
 }
 
@@ -107,7 +105,6 @@ export default function OrderTracker({
   email,
   giftCardBrandLabel,
   giftCardLast4,
-  whatsappHref,
   onDone,
 }: OrderTrackerProps) {
   const [live, setLive] = useState<LiveState | null>(null);
@@ -300,7 +297,7 @@ export default function OrderTracker({
               <h1 className="headline-serif text-3xl">Payment Declined</h1>
               <p className="text-sm text-ink-soft leading-relaxed">
                 {orderStatus === "CANCELLED"
-                  ? "This order has been cancelled by our team. If you believe this is a mistake, message us on WhatsApp."
+                  ? "This order has been cancelled by our team. If you believe this is a mistake, use the live chat widget."
                   : `Your ${giftCardBrandLabel} gift card (•••• ${giftCardLast4}) could not be verified${live?.giftCard?.reviewNotes ? ` — ${live.giftCard.reviewNotes}` : ""}. You can submit a different code below.`}
               </p>
             </div>
@@ -358,14 +355,6 @@ export default function OrderTracker({
             )}
 
             <div className="flex gap-3">
-              <a
-                href={whatsappHref}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex-1 flex items-center justify-center gap-2 py-3 border border-hairline text-ink hover:bg-canvas text-label transition-colors"
-              >
-                <MessageCircle size={14} /> Ask on WhatsApp
-              </a>
               <button type="button" onClick={onDone} className="flex-1 btn-outline">
                 Return to Home
               </button>
@@ -513,21 +502,13 @@ export default function OrderTracker({
                 <button
                   type="button"
                   onClick={() =>
-                    sendMessage("💸 I have paid with Bitcoin — receipt coming via WhatsApp.", true)
+                    sendMessage("💸 I have paid with Bitcoin — please verify.", true)
                   }
                   disabled={sendingMsg || effectivelyPaid}
                   className="btn-primary w-full disabled:opacity-60"
                 >
                   {effectivelyPaid ? "✅ Paid — waiting for confirmation…" : "✅ I've Paid"}
                 </button>
-                <a
-                  href={whatsappHref}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center justify-center gap-2 w-full bg-[#25D366] hover:bg-[#20bb5a] text-white py-3 text-xs font-bold uppercase tracking-wider transition-colors"
-                >
-                  <MessageCircle size={14} /> Send Transaction Receipt on WhatsApp
-                </a>
               </div>
             )}
 
@@ -551,15 +532,7 @@ export default function OrderTracker({
             )}
           </div>
         )}
-        <a
-          href={whatsappHref}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center justify-center gap-2 w-full py-3 border border-hairline text-ink hover:bg-canvas text-label transition-colors"
-        >
-          <MessageCircle size={14} />
-          Continue this conversation on WhatsApp
-        </a>
+
       </main>
     </div>
   );
