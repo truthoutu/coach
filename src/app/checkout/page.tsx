@@ -9,16 +9,12 @@ import OrderTracker from "@/components/checkout/OrderTracker";
 import {
  Lock,
  ArrowLeft,
- MessageCircle,
  CheckCircle2,
  Gift,
  Loader2,
 } from "lucide-react";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
-const WHATSAPP_LINK = "https://wa.me/15058006451";
-
-
 // ─── Persist active order so refresh / reopen does not dump the customer ────
 const ACTIVE_ORDER_KEY = "coach_active_order";
 
@@ -73,7 +69,7 @@ function normalizePaymentMethod(raw: string | null | undefined): PaymentMethod {
 
 
 // ─── Payment methods that are genuinely operational ─────────────────────────
-// Payment is coordinated through WhatsApp with our team. Gift card payments
+// Payment is coordinated with our team via live chat. Gift card payments
 // are accepted: the customer submits a card code and our team verifies it
 // manually before the order is processed.
 type PaymentMethod = "bitcoin" | "zelle" | "chime" | "cashapp" | "gift_card";
@@ -122,11 +118,6 @@ const COUNTRIES = [
  "United Arab Emirates", "Uruguay", "Uzbekistan", "Vanuatu", "Vatican City",
  "Venezuela", "Vietnam", "Yemen", "Zambia", "Zimbabwe",
 ];
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-function buildWhatsAppUrl(message: string) {
- return `${WHATSAPP_LINK}?text=${encodeURIComponent(message)}`;
-}
 
 type Phase = "form" | "payment";
 
@@ -345,43 +336,7 @@ function CheckoutInner() {
  }
  };
 
- // ── Build order message for a given payment method ────────────────────────
- const buildOrderMessage = (method: PaymentMethod) => {
- const itemLines = cart
- .map((i) => ` • ${i.name} x${i.quantity} — ${i.priceLabel}`)
- .join("\n");
- const addr = `${formData.firstName} ${formData.lastName}, ${formData.address}, ${formData.city} ${formData.postalCode}, ${formData.country}`;
- const methodLine =
- method === "bitcoin"
- ? "I'd like to pay with Bitcoin."
- : method === "zelle"
- ? "💜 I'd like to pay with Zelle."
- : method === "chime"
- ? "🟢 I'd like to pay with Chime."
- : method === "cashapp"
- ? "💚 I'd like to pay with Cash App."
- : "🎁 I'd like to pay with a gift card.";
-
- return (
- `Hi COACH 1! 🛍️\n\n` +
- `${methodLine}\n\n` +
- `📦 *Order ${orderNumber}*\n` +
- `Items:\n${itemLines}\n\n` +
- `💰 *Total:* $${subtotal.toFixed(2)}\n\n` +
- (method === "gift_card"
- ? `🎁 *Gift card:* ${GIFT_CARD_BRANDS.find((b) => b.id === giftCardData.brand)?.label ?? giftCardData.brand}\n` +
- `🔑 *Code:* ${giftCardData.code.trim()}\n` +
- (giftCardData.pin.trim() ? `🔐 *PIN:* ${giftCardData.pin.trim()}\n` : "") +
- (giftCardData.claimedValue.trim() ? `💵 *Claimed balance:* $${giftCardData.claimedValue.trim()}\n` : "") +
- `\n` : "") +
- `📍 *Ship to:* ${addr}\n` +
- `📧 *Email:* ${formData.email}\n` +
- (formData.phone ? `📱 *Phone:* ${formData.phone}\n` : "") +
- `\nPlease confirm and arrange payment. Thank you!`
- );
- };
-
- // ── Live payment tracker (order status, admin thread, I-have-paid) ────────
+  // ── Live payment tracker (order status, admin thread, I-have-paid) ────────
  if (phase === "payment") {
   const handleDone = () => {
    clearCart();
@@ -399,7 +354,6 @@ function CheckoutInner() {
     email={formData.email}
     giftCardBrandLabel={giftCardBrandLabel}
     giftCardLast4={giftCardLast4}
-    whatsappHref={buildWhatsAppUrl(buildOrderMessage(paymentMethod))}
     onDone={handleDone}
    />
   );
@@ -452,8 +406,8 @@ function CheckoutInner() {
  className="w-full px-4 py-3 border border-hairline text-sm outline-none focus:border-ink transition-colors bg-white" />
  </div>
  <div>
- <label className="block text-xs uppercase tracking-wider font-bold text-ink-soft mb-1">Phone (WhatsApp) *</label>
- <input type="tel" required placeholder="+1 505 800 6451" value={formData.phone}
+ <label className="block text-xs uppercase tracking-wider font-bold text-ink-soft mb-1">Phone *</label>
+ <input type="tel" required placeholder="+1 555 000 0000" value={formData.phone}
  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
  className="w-full px-4 py-3 border border-hairline text-sm outline-none focus:border-ink transition-colors bg-white" />
  </div>
@@ -555,7 +509,7 @@ function CheckoutInner() {
  </p>
  <p className="text-[12px] text-muted leading-relaxed">
  We accept Amazon, Visa/Mastercard prepaid, Steam, Apple, Google Play and more. Your code is
- stored securely and verified by our team on WhatsApp — your order ships once it checks out.
+ stored securely and verified by our team via live chat — your order ships once it checks out.
  Never share your code anywhere else.
  </p>
  <div>
@@ -699,17 +653,12 @@ function CheckoutInner() {
  <p>
  1. Your order is saved with a reference number.
  <br />
- 2. We&apos;ll arrange payment with you on WhatsApp.
+ 2. We&apos;ll arrange payment with you via live chat.
  <br />
  3. Your order begins processing once payment is confirmed.
  </p>
  </div>
 
- <a href={WHATSAPP_LINK} target="_blank" rel="noopener noreferrer"
- className="flex items-center justify-center gap-2 w-full py-3 border border-hairline text-ink hover:bg-canvas text-label transition-colors">
- <MessageCircle size={14} />
- Questions? Chat with us on WhatsApp
- </a>
  </div>
  </div>
  </form>
